@@ -1,4 +1,4 @@
-param([string]$Version='1.2.0',[switch]$SkipBuild)
+param([string]$Version='1.3.0',[switch]$SkipBuild)
 $ErrorActionPreference='Stop'
 if($Version -notmatch '^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$'){throw '版本号格式无效。'}
 if(-not $SkipBuild){& (Join-Path $PSScriptRoot 'build.ps1') -Test}

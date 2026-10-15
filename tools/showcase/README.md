@@ -17,3 +17,4 @@ python tools\showcase\build.py
 
 输出位于 `assets/readme/`；原始截图和中间输出被 Git 忽略。
 每次重建原生测试宿主后需要重启宿主，以保证截图使用最新资源。
+除总览、明细与设置外，还会生成 `trend-selection` 图表选区与 `time-range` 日期／时分面板展示图。

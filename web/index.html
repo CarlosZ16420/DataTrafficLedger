@@ -26,7 +26,17 @@
       <div class="settings-foot"><span id="storage-status"></span><span id="data-directory"></span></div>
     </section>
     <section class="filters" aria-label="筛选记录">
-      <div class="date-controls"><div class="segmented" id="presets"><button class="active" data-days="1" aria-pressed="true">今天</button><button data-days="2" aria-pressed="false">昨天</button><button data-days="7" aria-pressed="false">近 7 天</button><button data-days="30" aria-pressed="false">近 30 天</button></div><div class="date-range"><input type="date" id="date-from" aria-label="开始日期"><span>—</span><input type="date" id="date-to" aria-label="结束日期"><span class="timezone">UTC+8</span></div></div>
+      <div class="date-controls"><div class="segmented" id="presets"><button class="active" data-days="1" aria-pressed="true">今天</button><button data-days="2" aria-pressed="false">昨天</button><button data-days="7" aria-pressed="false">近 7 天</button><button data-days="30" aria-pressed="false">近 30 天</button></div>
+        <div class="date-range"><button class="range-trigger" id="range-picker-button" aria-expanded="false" aria-controls="range-picker" aria-haspopup="dialog"><span id="range-from-label">开始日期</span><span aria-hidden="true">—</span><span id="range-to-label">结束日期</span><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><rect x="3" y="4.5" width="14" height="13" rx="2"/><path d="M6 2.5v4M14 2.5v4M3 9h14"/></svg></button><span class="timezone">UTC+8</span>
+          <section id="range-picker" class="range-picker" role="dialog" aria-label="选择日期与时间" hidden>
+            <div class="range-picker-heading"><h3>选择时间范围</h3><button class="text-button" id="close-range-picker" aria-label="取消选择时间">关闭 ×</button></div>
+            <label class="whole-day-toggle"><input type="checkbox" id="range-whole-days" checked>包含完整日期 <small>默认全天</small></label>
+            <div class="range-fields"><label>开始日期<input type="date" id="date-from" aria-label="开始日期" required></label><label>结束日期<input type="date" id="date-to" aria-label="结束日期" required></label><label class="time-field" hidden>开始时间<input type="time" id="time-from" aria-label="开始时间" value="00:00" step="60" required></label><label class="time-field" hidden>结束时间<input type="time" id="time-to" aria-label="结束时间" value="23:59" step="60" required></label></div>
+            <p class="range-help" id="range-help">包含开始与结束日期的全天记录。</p><p class="range-error" id="range-error" role="alert" hidden></p>
+            <div class="range-picker-footer"><span>北京时间 · UTC+8</span><button class="button primary" id="apply-range">应用筛选</button></div>
+          </section>
+        </div>
+      </div>
       <div class="filter-controls"><div class="scope-controls" id="scopes"><button class="active" data-scope="all" aria-pressed="true">全部来源</button><button data-scope="proxy" aria-pressed="false">代理</button><button data-scope="direct" aria-pressed="false">Clash 直连</button><button data-scope="windows" aria-pressed="false">Clash 外</button></div><button class="japan-button" id="japan-filter" aria-pressed="false">🇯🇵 日本节点</button><select id="node-filter" aria-label="选择实际节点"><option value="">全部节点</option></select><label class="search"><span aria-hidden="true">⌕</span><input type="search" id="search" placeholder="搜索应用、域名或 IP" aria-label="搜索应用、域名或 IP"></label></div>
       <div class="filter-summary" id="filter-summary" hidden><span id="active-filters"></span><button class="text-button" id="reset-filters">清除筛选 ×</button></div>
     </section>
@@ -39,7 +49,7 @@
     </section>
     <div class="context-strip"><span id="range-summary">正在读取记录…</span><span id="inventory-summary"></span></div>
     <div class="analytics-grid">
-      <section class="panel trend-panel"><div class="panel-heading"><div><h2>用量趋势</h2><p id="trend-subtitle">所选时间范围的上下行用量</p></div><div class="chart-legend"><span><i class="dot blue"></i>下载</span><span><i class="dot teal"></i>上传</span></div></div><div id="trend-chart" class="trend-chart" aria-label="流量趋势图"></div><div class="chart-caption"><span id="trend-peak">暂无峰值记录</span><span>悬停或聚焦图中数据点查看用量</span></div></section>
+      <section class="panel trend-panel"><div class="panel-heading"><div><h2>用量趋势</h2><p id="trend-subtitle">所选时间范围的上下行用量</p></div><div class="chart-legend"><span><i class="dot blue"></i>下载</span><span><i class="dot teal"></i>上传</span></div></div><div class="chart-selection-bar"><span id="chart-selection-hint" role="status">点击选起点，再次点击选终点。</span><button class="text-button" id="clear-time-range" hidden>恢复整天 ×</button></div><div id="trend-chart" class="trend-chart" aria-label="流量趋势图"></div><div class="chart-caption"><span id="trend-peak">暂无峰值记录</span><span>分钟筛选 · 空白时段也可选取</span></div></section>
       <section class="panel composition-panel"><div class="panel-heading"><div><h2>来源分布</h2><p>当前筛选下的已归属用量</p></div><span class="panel-kicker">BREAKDOWN</span></div><div class="composition-body"><div id="source-chart" class="source-chart"></div><div id="source-legend" class="source-legend"></div></div><div class="top-sites"><div class="subheading"><h3>热门网站</h3><span id="sites-caption">按用量排序</span></div><div id="top-sites"></div></div></section>
     </div>
     <div class="accuracy-strip"><span class="accuracy-label">采样记录</span><span id="accuracy-text">正在读取记录…</span><button class="text-button" id="accuracy-toggle" aria-expanded="false" aria-controls="accuracy-detail">计量说明 ⓘ</button></div>

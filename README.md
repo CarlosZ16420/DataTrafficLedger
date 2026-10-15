@@ -8,7 +8,7 @@
 为 Windows 电脑留一本本地流量账本。<br>
 按应用、网站与实际代理节点查看用量，关掉页面也继续记录。
 
-![Version](https://img.shields.io/badge/version-1.2.0-547fec?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.3.0-547fec?style=flat-square)
 ![Windows x64](https://img.shields.io/badge/Windows-10%2F11_x64-172a47?style=flat-square)
 ![Portable](https://img.shields.io/badge/portable-解压即用-169e8d?style=flat-square)
 ![MIT](https://img.shields.io/badge/license-MIT-169e8d?style=flat-square)
@@ -33,7 +33,7 @@
 
 ## 快速开始
 
-1. 在 [Releases](https://github.com/CarlosZ16420/LocalTrafficLedger/releases/latest) 下载 `LocalTrafficLedger-v1.2.0-win-x64-portable.zip`，**完整解压到可写文件夹**。
+1. 在 [Releases](https://github.com/CarlosZ16420/LocalTrafficLedger/releases/latest) 下载 `LocalTrafficLedger-v1.3.0-win-x64-portable.zip`，**完整解压到可写文件夹**。
 2. 双击 `LocalTrafficLedger.exe`。程序进入系统托盘，并用默认浏览器打开仪表盘。
 3. 正常使用网络，稍后刷新即可查看新记录。关闭网页不会停止采集，点击托盘图标可再次打开。
 
@@ -51,13 +51,32 @@
 | 你想知道什么 | 如何查看 |
 | --- | --- |
 | 今天或一段时间用了多少 | 今天、昨天、近 7 天、近 30 天及自定义日期，统一按北京时间统计 |
-| 什么时候用得最多 | 上下行趋势、单时段峰值；悬停查看用量，键盘左右切换数据点 |
+| 什么时候用得最多 | 上下行趋势、单时段峰值；悬停查看用量，两次点击直接筛选时间区间 |
 | 流量从哪里经过 | 代理、Clash 直连、Clash 外的独立用量与占比 |
 | 哪个应用、网站或节点用得多 | 切换三种明细视图，按总量、下载、上传或名称排序 |
+| 同一个应用走了哪些路径 | 应用名称旁同时标出代理、直连、Clash 外等路径标签，随当前筛选变化 |
 | 具体访问了什么，走了哪个节点 | 展开应用 → 网站分组 → 原始域名与实际节点；支持日本节点筛选、指定节点与搜索 |
 | 需要自己留档或继续分析 | 按当前日期和筛选导出 CSV；采集启动、中断和恢复另有状态记录 |
 
 [![展开明细，查看网站、原始域名和实际节点，截图为演示数据](assets/readme/details-showcase.zh-CN.png)](assets/readme/details-showcase.zh-CN.png)
+
+### 在趋势图上，直接圈定想看的时间
+
+第一次点击选起点，第二次点击选终点，第三次点击开始新的选区；反向选择也可以。
+图表保留原日期范围，方便继续选取其他时段；摘要、应用明细、来源占比和 CSV 会同步使用选定的时间。
+按 Esc 取消尚未完成的起点，或点击“恢复整天”还原范围。
+
+[![点击趋势图筛选时段，截图为演示数据](assets/readme/trend-selection-showcase.zh-CN.png)](assets/readme/trend-selection-showcase.zh-CN.png)
+
+右上角的日历面板默认包含完整日期。需要具体时分时，取消“包含完整日期”，选择开始和结束时间再应用。
+统一使用北京时间，精确到分钟，并包含结束分钟；例如 15:45—16:00 包含这 16 个分钟桶的记录。
+
+<details>
+<summary>查看日期与时分选择面板</summary>
+
+[![日期与时分选择面板](assets/readme/time-range-showcase.zh-CN.png)](assets/readme/time-range-showcase.zh-CN.png)
+
+</details>
 
 ### 白天清楚，夜间舒适
 

@@ -60,14 +60,17 @@ PRAGMA user_version=1;");
             var summary=db.Query("SELECT COALESCE(SUM(t.upload),0) upload,COALESCE(SUM(t.download),0) download,COUNT(DISTINCT d.app) applications,COUNT(DISTINCT d.host) hosts,MIN(t.bucket) first,MAX(t.bucket) last"+join,args.ToArray())[0];
             var rows=db.Query("SELECT d.id,d.source,d.app,d.path,d.host,d.ip,d.node,d.route,d.network,d.rule,d.chain,SUM(t.upload) upload,SUM(t.download) download,MIN(t.bucket) first,MAX(t.bucket) last"+join+" GROUP BY d.id ORDER BY SUM(t.upload+t.download) DESC LIMIT 5001",args.ToArray());
             bool truncated=rows.Count>5000;if(truncated)rows.RemoveAt(5000);
-            long step=q.To-q.From>3*86400?3600: q.To-q.From>86400?900:300;
-            var trendArgs=new List<object>{step,step};trendArgs.AddRange(args);
+            long trendFrom=q.TrendTo>q.TrendFrom?q.TrendFrom:q.From,trendTo=q.TrendTo>q.TrendFrom?q.TrendTo:q.To;
+            long step=trendTo-trendFrom>3*86400?3600: trendTo-trendFrom>86400?900:300;
+            var contextArgs=new List<object>(args);contextArgs[0]=trendFrom;contextArgs[1]=trendTo;
+            var trendArgs=new List<object>{step,step};trendArgs.AddRange(contextArgs);
             var trend=db.Query("SELECT (t.bucket / ?) * ? bucket,SUM(t.upload) upload,SUM(t.download) download"+join+" GROUP BY 1 ORDER BY 1",trendArgs.ToArray());
             var kinds=db.Query("SELECT d.source,d.route,SUM(t.upload) upload,SUM(t.download) download"+join+" GROUP BY d.source,d.route",args.ToArray());
+            var applicationRoutes=db.Query("SELECT DISTINCT d.app,d.path,d.source,d.route"+join,args.ToArray());
             var global=db.Query("SELECT COALESCE(SUM(upload),0) upload,COALESCE(SUM(download),0) download,COALESCE(SUM(attributed_upload),0) attributedUpload,COALESCE(SUM(attributed_download),0) attributedDownload FROM core_totals WHERE bucket>=? AND bucket<?",q.From,q.To)[0];
             var events=db.Query("SELECT at,kind,detail FROM events WHERE at>=? AND at<? ORDER BY at DESC,id DESC LIMIT 100",q.From,q.To);
-            var nodes=db.Query("SELECT DISTINCT d.node FROM traffic t JOIN dimensions d ON t.dimension=d.id WHERE t.bucket>=? AND t.bucket<? AND d.source='mihomo' ORDER BY d.node",q.From,q.To).Select(r=>r["node"]).ToArray();
-            return new { summary=summary,rows=rows,trend=trend,trendStep=step,kinds=kinds,core=global,events=events,nodes=nodes,truncated=truncated,from=q.From,to=q.To };
+            var nodes=db.Query("SELECT DISTINCT d.node FROM traffic t JOIN dimensions d ON t.dimension=d.id WHERE t.bucket>=? AND t.bucket<? AND d.source='mihomo' ORDER BY d.node",trendFrom,trendTo).Select(r=>r["node"]).ToArray();
+            return new { summary=summary,rows=rows,applicationRoutes=applicationRoutes,trend=trend,trendStep=step,kinds=kinds,core=global,events=events,nodes=nodes,truncated=truncated,from=q.From,to=q.To,trendFrom=trendFrom,trendTo=trendTo };
         }
     }
     public string Csv(Query q) {

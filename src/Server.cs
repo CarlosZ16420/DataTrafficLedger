@@ -51,7 +51,7 @@ internal sealed class LocalServer : IDisposable {
                     Dictionary<string,object> etw;try{etw=Json.Read(store.GetMeta("etw_health"))??new Dictionary<string,object>();}catch{etw=new Dictionary<string,object>();}if(Clock.Now-Json.Num(etw,"at")>20)etw["running"]=false;
                     long bytes=0;try{bytes=new FileInfo(store.FilePath).Length;var wal=store.FilePath+"-wal";if(File.Exists(wal))bytes+=new FileInfo(wal).Length;}catch{}
                     var saved=LedgerConfig.Load(data);
-                    using(var process=Process.GetCurrentProcess())RespondJson(stream,new{collector=collector.Status(),etw=etw,startup=Startup.Enabled,startupNeedsRepair=Startup.NeedsRepair(data),fullRequested=saved.EtwRequested,retentionDays=config.RetentionDays,dataDirectory=data,databaseBytes=bytes,memoryBytes=process.WorkingSet64,icons=icons.IsValueCreated?icons.Value.Stats():new IconCacheStats(),preferences=new{theme=saved.Theme,autoRefresh=saved.AutoRefresh},endpoint=new{port=Port,configuredPort=saved.Port,automatic=saved.Port==0,restartRequired=saved.Port!=startingPort,fallback=startingPort!=0&&startingPort!=Port},portable=File.Exists(Path.Combine(Path.GetDirectoryName(Program.Executable),"portable.json")),csrf=Token,version="1.2.0",now=Clock.Now});return;
+                    using(var process=Process.GetCurrentProcess())RespondJson(stream,new{collector=collector.Status(),etw=etw,startup=Startup.Enabled,startupNeedsRepair=Startup.NeedsRepair(data),fullRequested=saved.EtwRequested,retentionDays=config.RetentionDays,dataDirectory=data,databaseBytes=bytes,memoryBytes=process.WorkingSet64,icons=icons.IsValueCreated?icons.Value.Stats():new IconCacheStats(),preferences=new{theme=saved.Theme,autoRefresh=saved.AutoRefresh},endpoint=new{port=Port,configuredPort=saved.Port,automatic=saved.Port==0,restartRequired=saved.Port!=startingPort,fallback=startingPort!=0&&startingPort!=Port},portable=File.Exists(Path.Combine(Path.GetDirectoryName(Program.Executable),"portable.json")),csrf=Token,version="1.3.0",now=Clock.Now});return;
                 }
                 if(path=="/api/icon"&&method=="GET"){
                     string id=Get(query,"id");byte[] identifier;try{identifier=Convert.FromBase64String(id);}catch(FormatException){Respond(stream,400,"无效的应用标识");return;}
@@ -76,7 +76,12 @@ internal sealed class LocalServer : IDisposable {
             }catch(ArgumentException ex){Respond(stream,400,ex.Message);}catch(Exception){try{Respond(stream,500,"暂时无法读取记录，请稍后刷新。详情可查看数据文件夹中的状态记录。");}catch{}}
         }
     }
-    internal static Query BuildQuery(Dictionary<string,string> d){string from=Get(d,"from"),to=Get(d,"to");var q=new Query{From=Clock.DateBoundary(from,false),To=Clock.DateBoundary(to,true),Scope=Get(d,"scope","all"),Search=Get(d,"search"),Node=Get(d,"node"),App=Get(d,"app"),Japan=Get(d,"japan")=="true"};if(q.To<=q.From||q.To-q.From>3660L*86400)throw new ArgumentException("日期范围无效");if(q.Search.Length>200||q.Node.Length>300||q.App.Length>300)throw new ArgumentException("筛选条件过长");return q;}
+    internal static Query BuildQuery(Dictionary<string,string> d){
+        string from=Get(d,"from"),to=Get(d,"to");
+        var q=new Query{From=Clock.TimeBoundary(from,Get(d,"fromTime"),false),To=Clock.TimeBoundary(to,Get(d,"toTime"),true),TrendFrom=Clock.DateBoundary(Get(d,"chartFrom",from),false),TrendTo=Clock.DateBoundary(Get(d,"chartTo",to),true),Scope=Get(d,"scope","all"),Search=Get(d,"search"),Node=Get(d,"node"),App=Get(d,"app"),Japan=Get(d,"japan")=="true"};
+        if(q.To<=q.From||q.To-q.From>3660L*86400||q.TrendTo<=q.TrendFrom||q.TrendTo-q.TrendFrom>3660L*86400||q.TrendFrom>q.From||q.TrendTo<q.To)throw new ArgumentException("时间范围无效，起点应不晚于终点，并位于图表日期范围内。");
+        if(q.Search.Length>200||q.Node.Length>300||q.App.Length>300)throw new ArgumentException("筛选条件过长");return q;
+    }
     internal static Dictionary<string,string> ParseQuery(string query){var d=new Dictionary<string,string>();foreach(var pair in query.TrimStart('?').Split('&')){if(pair=="")continue;var split=pair.Split(new[]{'='},2);d[Uri.UnescapeDataString(split[0])]=split.Length>1?Uri.UnescapeDataString(split[1].Replace("+"," ")):"";}return d;}
     private static string Get(Dictionary<string,string> d,string key,string fallback=""){string v;return d.TryGetValue(key,out v)?v:fallback;}
     private static void RespondJson(Stream stream,object value){Respond(stream,200,Json.Write(value),"application/json; charset=utf-8");}

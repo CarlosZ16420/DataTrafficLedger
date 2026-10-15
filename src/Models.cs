@@ -26,6 +26,13 @@ internal static class Clock {
         if (nextDay) day = day.AddDays(1);
         return new DateTimeOffset(day,TimeSpan.FromHours(8)).ToUnixTimeSeconds();
     }
+    public static long TimeBoundary(string day,string time,bool end) {
+        if(string.IsNullOrEmpty(time))return DateBoundary(day,end);
+        DateTime value;
+        if(!DateTime.TryParseExact(day+"T"+time,"yyyy-MM-dd'T'HH:mm",CultureInfo.InvariantCulture,DateTimeStyles.None,out value))throw new ArgumentException("日期或时间无效，时间格式应为 HH:mm（北京时间）。");
+        // The ledger stores minute buckets; the selected ending minute is included in full.
+        return new DateTimeOffset(value,TimeSpan.FromHours(8)).ToUnixTimeSeconds()+(end?60:0);
+    }
 }
 internal sealed class LedgerConfig {
     public int Port = 0;
@@ -115,7 +122,7 @@ internal sealed class DeltaTracker {
     }
 }
 internal sealed class Query {
-    public long From,To;
+    public long From,To,TrendFrom,TrendTo;
     public string Scope="all",Search="",Node="",App="";
     public bool Japan;
 }

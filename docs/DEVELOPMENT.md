@@ -22,7 +22,9 @@ python tests\browser_check.py tests\live-demo --showcase
 ```
 
 宿主不启动采集器；真实统计 API 从独立 SQLite 中读取虚构用量。浏览器使用隔离配置，
-检查应用展开、原始域名、图标、排序、键盘读图、设置、CSV、主题、窄屏和外部请求。
+检查应用路径标签、原始域名、图标、排序、键盘读图、设置、CSV、主题、窄屏和外部请求。
+还会验证日历全天／时分筛选、两次和连续点击选区、反向／同一分钟／无数据时段、取消和重置，
+并将浏览器时区设为洛杉矶，验证筛选仍采用北京时间。GitHub Windows workflow 同样运行浏览器和便携搬迁检查。
 展示图工程参见 [tools/showcase](../tools/showcase/README.md)，其 Pillow 依赖仅用于文档制图。
 可用 `tests/runtime_report.py` 在维护机检查已安装实例；其结果只写入被忽略的本地文件。
 

@@ -20,7 +20,7 @@ internal static class Tests {
         if(args.Length==2&&args[0]=="--serve-fixture")return ServeFixture(args[1]);
         string root=Path.GetFullPath(Path.Combine(Environment.CurrentDirectory,"tests","run-"+Guid.NewGuid().ToString("N")));Directory.CreateDirectory(root);
         try{
-            TestDeltas();TestHttp();TestNativeEvents();TestStorage(root);TestIcons(Path.Combine(root,"icons"));TestConfig(Path.Combine(root,"config"));TestServer(Path.Combine(root,"server"));TestPortConflict(Path.Combine(root,"port-conflict"));
+            TestDeltas();TestHttp();TestNativeEvents();TestStorage(root);TestTimeFilters(Path.Combine(root,"time-filters"));TestIcons(Path.Combine(root,"icons"));TestConfig(Path.Combine(root,"config"));TestServer(Path.Combine(root,"server"));TestPortConflict(Path.Combine(root,"port-conflict"));
             Console.WriteLine("\n"+passed+" meaningful checks passed.");return 0;
         }catch(Exception ex){Console.WriteLine(ex);return 1;}
         finally{string allowed=Path.GetFullPath(Path.Combine(Environment.CurrentDirectory,"tests"))+Path.DirectorySeparatorChar;if(root.StartsWith(allowed,StringComparison.OrdinalIgnoreCase)&&Directory.Exists(root))Directory.Delete(root,true);}
@@ -39,10 +39,11 @@ internal static class Tests {
                     new Dimension{App="msedge.exe",Host="learn.microsoft.com",Node="DIRECT",Route="DIRECT"},
                     new Dimension{App="Telegram.exe",Host="149.154.167.220",Node="Windows 网络事件",Source="windows",Route="WINDOWS"},
                     new Dimension{App="explorer.exe",Path=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),"explorer.exe"),Host="download.windowsupdate.com",Node="DIRECT",Route="DIRECT"},
-                    new Dimension{App="chrome.exe",Path=chrome,Host="chatgpt.com",Node="🇯🇵 日本 · Tokyo 01"}};
+                    new Dimension{App="chrome.exe",Path=chrome,Host="chatgpt.com",Node="🇯🇵 日本 · Tokyo 01"},
+                    new Dimension{App="chrome.exe",Path=chrome,Host="www.bilibili.com",Node="DIRECT",Route="DIRECT"}};
                 long day=Clock.DateBoundary(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd"),false);
                 var facts=new List<Usage>();var totals=new List<TimedDelta>();
-                for(int i=0;i<132;i++){if(i>=48&&i<60)continue;long bucket=day+7*3600+i*300;long coreUp=0,coreDown=0;
+                for(int i=0;i<132;i++){if(i>=60&&i<72)continue;long bucket=day+7*3600+i*300;long coreUp=0,coreDown=0;
                     for(int j=0;j<dimensions.Length;j++){double wave=(Math.Sin(i*.19+j)+1.3)*(.4+Math.Pow(Math.Sin(i*.043+j*.7),2));long down=(long)((j==0?9500000:1100000)*(j==1?.15:1)*wave),up=(long)(down*(j==2?.65:.09));facts.Add(new Usage{Bucket=bucket,Dimension=dimensions[j],Upload=up,Download=down});if(j!=4){coreUp+=up;coreDown+=down;}}
                     totals.Add(new TimedDelta{Bucket=bucket,Upload=coreUp+12000,Download=coreDown+64000,AttributedUpload=coreUp,AttributedDownload=coreDown});
                 }
@@ -74,6 +75,13 @@ internal static class Tests {
         Assert(Clock.DateBoundary("2026-10-15",false)==new DateTimeOffset(2026,10,15,0,0,0,TimeSpan.FromHours(8)).ToUnixTimeSeconds(),"Daily boundaries use Beijing time including midnight");
         bool range=false;try{LocalServer.BuildQuery(new Dictionary<string,string>{{"from","2026-10-16"},{"to","2026-10-15"}});}catch(ArgumentException){range=true;}Assert(range,"Invalid date range is rejected");
         Assert(Store.CsvCell("=HYPERLINK(\"x\")").StartsWith("\"'="),"CSV cells cannot become spreadsheet formulas");
+        var minute=LocalServer.BuildQuery(new Dictionary<string,string>{{"from","2026-10-15"},{"to","2026-10-15"},{"fromTime","15:45"},{"toTime","15:45"}});
+        Assert(minute.To-minute.From==60&&minute.TrendTo-minute.TrendFrom==86400,"Equal start/end minutes include one full minute while preserving the daily trend context");
+        Assert(minute.From==Clock.DateBoundary("2026-10-15",false)+15*3600+45*60,"Custom clock times use Beijing time independently of system timezone");
+        Assert(Clock.TimeBoundary("2026-10-15","23:59",true)==Clock.DateBoundary("2026-10-16",false),"The ending minute includes the last minute before midnight without including the next day");
+        foreach(string bad in new[]{"24:00","12:60","12:30:45","abc"}){bool rejected=false;try{Clock.TimeBoundary("2026-10-15",bad,false);}catch(ArgumentException){rejected=true;}Assert(rejected,"Reject malformed minute filter "+bad);}
+        bool backwards=false;try{LocalServer.BuildQuery(new Dictionary<string,string>{{"from","2026-10-15"},{"to","2026-10-15"},{"fromTime","16:01"},{"toTime","16:00"}});}catch(ArgumentException){backwards=true;}Assert(backwards,"An ending minute before the starting minute is rejected");
+        bool outside=false;try{LocalServer.BuildQuery(new Dictionary<string,string>{{"from","2026-10-15"},{"to","2026-10-15"},{"chartFrom","2026-10-16"}});}catch(ArgumentException){outside=true;}Assert(outside,"A chart context cannot exclude the filtered range");
     }
     private static void TestNativeEvents(){
         IntPtr data=Marshal.AllocHGlobal(64);try{
@@ -109,6 +117,22 @@ internal static class Tests {
     }
     private static string Request(int port,string target,string headers="",string method="GET"){
         using(var client=new TcpClient("127.0.0.1",port))using(var stream=client.GetStream()){client.ReceiveTimeout=5000;byte[] req=Encoding.ASCII.GetBytes(method+" "+target+" HTTP/1.1\r\nHost: 127.0.0.1:"+port+"\r\n"+headers+"Connection: close\r\n\r\n");stream.Write(req,0,req.Length);using(var reader=new StreamReader(stream))return reader.ReadToEnd();}
+    }
+    private static void TestTimeFilters(string root){
+        using(var store=new Store(root)){
+            long day=Clock.DateBoundary("2026-10-15",false),start=day+15*3600+45*60;
+            var proxy=new Dimension{App="chrome.exe",Path=@"C:\Apps\chrome.exe",Host="example.com",Node="日本 A"};var direct=new Dimension{App="chrome.exe",Path=@"C:\Apps\chrome.exe",Host="direct.example",Node="DIRECT",Route="DIRECT"};
+            var facts=new[]{new Usage{Bucket=start-60,Dimension=proxy,Download=10},new Usage{Bucket=start,Dimension=proxy,Download=20},new Usage{Bucket=start+60,Dimension=direct,Download=30},new Usage{Bucket=start+120,Dimension=proxy,Download=40}};
+            var totals=facts.Select(f=>new TimedDelta{Bucket=f.Bucket,Download=f.Download,AttributedDownload=f.Download});store.Write(facts,totals,"test");
+            var q=LocalServer.BuildQuery(new Dictionary<string,string>{{"from","2026-10-15"},{"to","2026-10-15"},{"fromTime","15:45"},{"toTime","15:46"}});
+            var data=Json.Read(Json.Write(store.Stats(q)));
+            Assert(Json.Num(Json.Obj(data,"summary"),"download")==50,"Minute range excludes the preceding/following minutes and includes its final minute");
+            Assert(Json.Num(Json.Obj(data,"core"),"download")==50,"Core totals use the same selected minute boundaries as application totals");
+            Assert(Json.Array(data,"trend").OfType<Dictionary<string,object>>().Sum(r=>Json.Num(r,"download"))==100,"Trend retains unfiltered time context so a third click can choose a new start outside the old selection");
+            Assert(Json.Array(data,"applicationRoutes").OfType<Dictionary<string,object>>().Select(r=>Json.Str(r,"route")).Distinct().Count()==2,"An application's route summary contains both direct and proxy routes in the selected time range");
+            string csv=store.Csv(q);Assert(csv.Contains("15:45:00")&&csv.Contains("15:46:00")&&!csv.Contains("15:44:00")&&!csv.Contains("15:47:00"),"CSV export honors the exact same minute range");
+            q.Scope="proxy";data=Json.Read(Json.Write(store.Stats(q)));Assert(Json.Array(data,"applicationRoutes").OfType<Dictionary<string,object>>().All(r=>Json.Str(r,"route")=="PROXY"),"Application badges follow active source filters instead of reporting historical routes outside the query");
+        }
     }
     private static void TestConfig(string root){
         Directory.CreateDirectory(root);Assert(LedgerConfig.Load(root).Port==0,"New installations let Windows atomically allocate a free local port");
