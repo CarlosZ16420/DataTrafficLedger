@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark"><title>本机流量账本</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23131f31'/%3E%3Cpath d='M6 23l6-9 6 5 8-12' fill='none' stroke='%233ecfae' stroke-width='3'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <header class="header">
+    <a class="brand" href="/" aria-label="本机流量账本首页"><span class="brand-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m6 23 6-9 6 5 8-12"/></svg></span><span>本机流量账本<small>LOCAL TRAFFIC LEDGER</small></span></a>
+    <nav class="main-nav" aria-label="页面导航"><a href="#overview" class="active">总览</a><a href="#details">流量明细</a><a href="#history">记录状态</a></nav>
+    <div class="header-right"><span id="capture-status" class="capture-status"><i></i>正在连接</span><button class="button icon-button" id="theme-button" aria-label="切换到深色主题" title="切换主题">◐</button><button class="button" id="settings-button" aria-expanded="false" aria-controls="settings-panel">设置 <span aria-hidden="true">⚙</span></button></div>
+  </header>
+  <main id="overview">
+    <section class="page-title"><div><div class="eyebrow">YOUR NETWORK, AT A GLANCE</div><h1>流量总览<span class="local-badge">仅此电脑</span></h1><p>流量去了哪里，打开账本就知道。</p></div><div class="refresh-area"><span id="last-refresh">尚未刷新</span><button class="button primary" id="refresh-button"><span aria-hidden="true">↻</span> 刷新数据</button></div></section>
+    <section class="settings-panel" id="settings-panel" hidden aria-label="应用设置">
+      <div class="panel-heading"><div><h2>应用设置</h2><p>关闭页面后继续记录，退出托盘程序才会停止。</p></div><button class="text-button" id="close-settings" aria-label="关闭设置">关闭 ×</button></div>
+      <label class="setting-row"><span><strong>开机自启动</strong><small id="startup-description">登录 Windows 后在托盘运行，不自动打开页面。</small></span><input type="checkbox" id="startup-toggle" role="switch"></label>
+      <div class="setting-row" id="startup-repair-row" hidden><span><strong>自启动路径需要更新</strong><small>程序位置已改变，点击修复，将自启动关联到当前目录。</small></span><button class="button" id="repair-startup">修复自启动</button></div>
+      <div class="setting-row"><span><strong>Windows 补充采集</strong><small id="windows-status">检查状态中…</small></span><button class="button" id="enable-windows">启用补充采集</button></div>
+      <label class="setting-row"><span><strong>页面自动刷新</strong><small>每 15 秒刷新；页面在后台时暂停刷新。</small></span><input type="checkbox" id="auto-refresh-toggle" role="switch"></label>
+      <label class="setting-row"><span><strong>外观主题</strong><small>主题与刷新偏好保存在本机，端口变化后仍然保留。</small></span><select id="theme-select" aria-label="外观主题"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
+      <div class="setting-row endpoint-setting"><span><strong>本地访问端口</strong><small id="endpoint-description">自动选择空闲端口，从托盘打开即可。</small></span><div class="endpoint-controls"><select id="port-mode" aria-label="端口分配方式"><option value="auto">自动选择（推荐）</option><option value="fixed">指定端口</option></select><input id="port-number" type="number" min="1024" max="65535" step="1" value="18793" aria-label="指定端口号" hidden><button class="button" id="save-port">保存</button></div></div>
+      <div class="settings-foot"><span id="storage-status"></span><span id="data-directory"></span></div>
+    </section>
+    <section class="filters" aria-label="筛选记录">
+      <div class="date-controls"><div class="segmented" id="presets"><button class="active" data-days="1" aria-pressed="true">今天</button><button data-days="2" aria-pressed="false">昨天</button><button data-days="7" aria-pressed="false">近 7 天</button><button data-days="30" aria-pressed="false">近 30 天</button></div><div class="date-range"><input type="date" id="date-from" aria-label="开始日期"><span>—</span><input type="date" id="date-to" aria-label="结束日期"><span class="timezone">UTC+8</span></div></div>
+      <div class="filter-controls"><div class="scope-controls" id="scopes"><button class="active" data-scope="all" aria-pressed="true">全部来源</button><button data-scope="proxy" aria-pressed="false">代理</button><button data-scope="direct" aria-pressed="false">Clash 直连</button><button data-scope="windows" aria-pressed="false">Clash 外</button></div><button class="japan-button" id="japan-filter" aria-pressed="false">🇯🇵 日本节点</button><select id="node-filter" aria-label="选择实际节点"><option value="">全部节点</option></select><label class="search"><span aria-hidden="true">⌕</span><input type="search" id="search" placeholder="搜索应用、域名或 IP" aria-label="搜索应用、域名或 IP"></label></div>
+      <div class="filter-summary" id="filter-summary" hidden><span id="active-filters"></span><button class="text-button" id="reset-filters">清除筛选 ×</button></div>
+    </section>
+    <div id="message" class="message" role="status" hidden></div>
+    <section class="metrics" aria-label="流量摘要">
+      <article class="metric main-metric"><div class="metric-label">已归属流量 <span>当前筛选</span></div><div class="metric-value" id="total-value">—</div><div class="metric-bottom"><span id="total-upload">↑ —</span><span id="total-download">↓ —</span></div></article>
+      <article class="metric"><div class="metric-label"><span class="dot blue"></span>通过代理 <span class="metric-symbol" aria-hidden="true">↗</span></div><div class="metric-value" id="proxy-value">—</div><div class="metric-note" id="proxy-note">按连接的实际节点统计</div></article>
+      <article class="metric"><div class="metric-label"><span class="dot teal"></span>Clash 直连 <span class="metric-symbol" aria-hidden="true">⇄</span></div><div class="metric-value" id="direct-value">—</div><div class="metric-note">经过 Clash，规则选择 DIRECT</div></article>
+      <article class="metric"><div class="metric-label"><span class="dot amber"></span>Clash 外流量 <span class="metric-symbol" aria-hidden="true">⊞</span></div><div class="metric-value" id="windows-value">—</div><div class="metric-note" id="windows-note">Windows 补充采集</div></article>
+    </section>
+    <div class="context-strip"><span id="range-summary">正在读取记录…</span><span id="inventory-summary"></span></div>
+    <div class="analytics-grid">
+      <section class="panel trend-panel"><div class="panel-heading"><div><h2>用量趋势</h2><p id="trend-subtitle">所选时间范围的上下行用量</p></div><div class="chart-legend"><span><i class="dot blue"></i>下载</span><span><i class="dot teal"></i>上传</span></div></div><div id="trend-chart" class="trend-chart" aria-label="流量趋势图"></div><div class="chart-caption"><span id="trend-peak">暂无峰值记录</span><span>悬停或聚焦图中数据点查看用量</span></div></section>
+      <section class="panel composition-panel"><div class="panel-heading"><div><h2>来源分布</h2><p>当前筛选下的已归属用量</p></div><span class="panel-kicker">BREAKDOWN</span></div><div class="composition-body"><div id="source-chart" class="source-chart"></div><div id="source-legend" class="source-legend"></div></div><div class="top-sites"><div class="subheading"><h3>热门网站</h3><span id="sites-caption">按用量排序</span></div><div id="top-sites"></div></div></section>
+    </div>
+    <div class="accuracy-strip"><span class="accuracy-label">采样记录</span><span id="accuracy-text">正在读取记录…</span><button class="text-button" id="accuracy-toggle" aria-expanded="false" aria-controls="accuracy-detail">计量说明 ⓘ</button></div>
+    <div class="accuracy-detail" id="accuracy-detail" hidden><p>Clash 接口提供活动连接的累计字节数。短连接和连接结束前的末段可能无法归属；内核总量与明细的差额单独显示，不分摊到任何节点。</p><p>Clash 外流量采用 Windows 网络事件的字节口径，与 Clash 的连接字节口径有所不同。已排除回环及代理核心；TUN 开启时暂停补充计量，避免重复。无法识别的网站保留为 IP。</p><p>日本筛选根据节点名称中的“日本”、日本旗帜、Japan 或 [JP] 归类。网站分组同样只是域名归类，展开后可查看原始域名。首次启动之前及停止采集期间的历史无法恢复。</p></div>
+    <section class="panel details-panel" id="details"><div class="panel-heading details-heading"><div><h2>流量去向 <span id="record-count" class="count-badge">0</span></h2><p>展开应用，追溯网站、原始域名与实际节点。</p></div><button class="button" id="export-button">导出 CSV <span aria-hidden="true">↗</span></button></div><div class="table-toolbar"><div class="view-tabs" id="views"><button class="active" data-view="app" aria-pressed="true">按应用</button><button data-view="node" aria-pressed="false">按节点</button><button data-view="host" aria-pressed="false">按网站</button></div><div class="table-options"><label class="group-toggle"><input type="checkbox" id="service-toggle" checked>合并常见网站</label><select id="sort-order" aria-label="明细排序"><option value="total">总流量 ↓</option><option value="download">下载量 ↓</option><option value="upload">上传量 ↓</option><option value="name">名称 A–Z</option></select></div></div><div class="table-head"><span id="dimension-heading">应用 / 网站 / 节点</span><span>总流量</span><span>上传</span><span>下载</span><span>占比</span></div><div id="traffic-table"></div><div class="table-bottom"><span id="table-description"></span><button class="text-button" id="show-more" hidden>显示更多</button></div></section>
+    <section class="panel history-panel" id="history"><div class="panel-heading"><div><h2>记录状态</h2><p>采集启动、中断与恢复都会留下时间记录。</p></div><span class="history-note">北京时间 · UTC+8</span></div><div id="history-list" class="history-list"></div></section>
+    <footer><span><i class="footer-lock" aria-hidden="true">◈</i> 数据留在本机 · 无遥测 · 无外部资源</span><span id="footer-status">后台采集与页面刷新独立运行</span></footer>
+  </main>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+</body>
+</html>
