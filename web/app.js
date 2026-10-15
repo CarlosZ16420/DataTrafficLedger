@@ -117,6 +117,9 @@ function renderComposition(proxy,direct,windows,total){
 }
 function service(host){host=host.toLowerCase();const match=s=>host===s||host.endsWith('.'+s);if(['youtube.com','youtu.be','googlevideo.com','ytimg.com','youtube-nocookie.com'].some(match))return 'YouTube';if(['chatgpt.com','openai.com','oaistatic.com','oaiusercontent.com'].some(match))return 'ChatGPT / OpenAI';if(['github.com','githubassets.com','githubusercontent.com'].some(match))return 'GitHub';if(['claude.ai','anthropic.com'].some(match))return 'Claude / Anthropic';return host;}
 function groupRows(rows,keyFn){const groups=new Map();rows.forEach(r=>{const key=keyFn(r);if(!groups.has(key))groups.set(key,{key,rows:[],upload:0,download:0});const g=groups.get(key);g.rows.push(r);g.upload+=Number(r.upload);g.download+=Number(r.download);});return [...groups.values()].sort((a,b)=>(b.upload+b.download)-(a.upload+a.download));}
+function sortChoice(){const value=$('sort-order').value;return {field:value.replace(/-asc$/,''),ascending:value==='name'||value.endsWith('-asc')};}
+function sortTableGroups(groups,title){const sort=sortChoice(),name=(a,b)=>title(a).localeCompare(title(b),'zh-CN')||a.key.localeCompare(b.key,'zh-CN'),value=g=>sort.field==='upload'?g.upload:sort.field==='download'?g.download:g.upload+g.download;return groups.sort((a,b)=>sort.field==='name'?name(a,b):(sort.ascending?value(a)-value(b):value(b)-value(a))||name(a,b));}
+function renderSortHeaders(){const sort=sortChoice();document.querySelectorAll('[data-sort-field]').forEach(button=>{const active=button.dataset.sortField===sort.field,label=button.dataset.sortLabel;button.setAttribute('aria-pressed',String(active));button.querySelector('.sort-arrow').textContent=active?(sort.ascending?'↑':'↓'):'↕';button.setAttribute('aria-label',label+(active?'，当前'+(sort.ascending?'从小到大':'从大到小'):'')+'，点击'+(active&&state.sortTouched&&!sort.ascending?'从小到大':'从大到小')+'排序');});}
 function routeInfo(r){return r.source==='windows'?{key:'windows',label:'Clash 外',className:'windows',order:2}:r.route==='DIRECT'?{key:'direct',label:'直连',className:'direct',order:1}:r.route==='PROXY'?{key:'proxy',label:'代理',className:'proxy',order:0}:r.route==='REJECT'?{key:'reject',label:'拒绝',className:'other',order:3}:{key:'other',label:'其他路线',className:'other',order:4};}
 function routeTag(r){const tag=routeInfo(r);return `<span class="route-tag ${tag.className}">${tag.label}</span>`;}
 function routeTags(rows){const tags=new Map();rows.forEach(r=>{const info=routeInfo(r);if(!tags.has(info.key))tags.set(info.key,{info,row:r});});return [...tags.values()].sort((a,b)=>a.info.order-b.info.order).map(t=>routeTag(t.row)).join('');}
@@ -139,19 +142,19 @@ document.addEventListener('visibilitychange',()=>{if(!document.hidden)pumpIcons(
 function renderTable(){
   if(!state.data)return;const rows=state.data.rows,view=state.view,merge=$('service-toggle').checked;
   const appRoutes=new Map();(state.data.applicationRoutes||rows).forEach(r=>{const key=JSON.stringify([r.app,r.path]);if(!appRoutes.has(key))appRoutes.set(key,[]);appRoutes.get(key).push(r);});
-  const roots=groupRows(rows,r=>view==='app'?JSON.stringify([r.app,r.path]):view==='node'?r.node:merge?service(r.host):r.host),sort=$('sort-order').value;
-  if(sort==='name')roots.sort((a,b)=>(view==='app'?a.rows[0].app:a.key).localeCompare(view==='app'?b.rows[0].app:b.key,'zh-CN'));else if(sort!=='total')roots.sort((a,b)=>b[sort]-a[sort]);
+  const roots=sortTableGroups(groupRows(rows,r=>view==='app'?JSON.stringify([r.app,r.path]):view==='node'?r.node:merge?service(r.host):r.host),g=>view==='app'?g.rows[0].app:g.key);
+  renderSortHeaders();
   $('record-count').textContent=roots.length;$('dimension-heading').textContent=view==='app'?'应用 / 网站 / 节点':view==='node'?'节点 / 应用 / 网站':'网站 / 应用 / 节点';
   if(!rows.length){$('traffic-table').innerHTML='<div class="empty-state"><span class="empty-icon">↗</span><strong>这里还没有记录</strong><p>记录从应用首次运行开始。你可以正常使用网络后刷新，或调整日期与筛选条件。Clash 外流量需要先在设置中启用 Windows 补充采集。</p></div>';$('table-description').textContent='首次启动之前的历史无法补回。';$('show-more').hidden=true;observeApplicationIcons();return;}
   let html='';roots.slice(0,state.limit).forEach((g,index)=>{
     const first=g.rows[0],key=`${view}:${g.key}`,title=view==='app'?first.app:g.key;const nodes=new Set(g.rows.map(r=>r.node));const subtitle=view==='app'?(first.path||`${nodes.size} 个出口 · ${new Set(g.rows.map(r=>r.host)).size} 个域名`):view==='node'?`${new Set(g.rows.map(r=>r.app)).size} 个应用 · ${new Set(g.rows.map(r=>r.host)).size} 个域名`:`${new Set(g.rows.map(r=>r.app)).size} 个应用 · ${nodes.size} 个出口`;
     html+=rowHtml(g,key,title,subtitle,0,view==='node'?'node':view==='host'?'domain':first.app.toLowerCase().includes('chrome')?'chrome':'',true,view==='app'?routeTags(appRoutes.get(g.key)||g.rows):'',view==='app'&&first.path?first.id:'');
     if(!state.expanded.has(key))return;
-    const children=groupRows(g.rows,r=>view==='app'?(merge?service(r.host):r.host):JSON.stringify([r.app,r.path]));
+    const children=sortTableGroups(groupRows(g.rows,r=>view==='app'?(merge?service(r.host):r.host):JSON.stringify([r.app,r.path])),child=>view==='app'?child.key:child.rows[0].app);
     children.forEach(child=>{const r=child.rows[0],childKey=key+'::'+child.key,childTitle=view==='app'?child.key:r.app,childSub=view==='app'?`${new Set(child.rows.map(v=>v.host)).size} 个域名 · ${new Set(child.rows.map(v=>v.node)).size} 个出口`:(r.path||'展开查看域名和节点');
       html+=rowHtml(child,childKey,childTitle,childSub,1,view==='app'?'domain':'',true,'',view!=='app'&&r.path?r.id:'');
       if(!state.expanded.has(childKey))return;
-      groupRows(child.rows,r=>JSON.stringify([r.host,r.node,r.source,r.route])).forEach(leaf=>{const l=leaf.rows[0];html+=rowHtml(leaf,'',l.host,l.node+(l.source==='windows'?' · 无法从加密连接确定域名':` · ${l.network.toUpperCase()}`),2,'',false,routeTag(l));});
+      sortTableGroups(groupRows(child.rows,r=>JSON.stringify([r.host,r.node,r.source,r.route])),leaf=>leaf.rows[0].host).forEach(leaf=>{const l=leaf.rows[0];html+=rowHtml(leaf,'',l.host,l.node+(l.source==='windows'?' · 无法从加密连接确定域名':` · ${l.network.toUpperCase()}`),2,'',false,routeTag(l));});
     });
   });$('traffic-table').innerHTML=html;observeApplicationIcons();$('table-description').textContent=`${roots.length} 个${view==='app'?'应用':view==='node'?'出口':'网站'} · ${rows.length.toLocaleString()} 组明细${state.data.truncated?'（展示最高流量组合）':''}`;$('show-more').hidden=roots.length<=state.limit;
 }
@@ -164,7 +167,8 @@ $('japan-filter').addEventListener('click',()=>{state.japan=!state.japan;$('japa
 $('node-filter').addEventListener('change',()=>{resetView();refresh();});
 let searchTimer;$('search').addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{resetView();refresh();},350);});
 $('views').addEventListener('click',e=>{const b=e.target.closest('[data-view]');if(!b)return;state.view=b.dataset.view;pressed('#views',x=>x===b);resetView();renderTable();});
-$('sort-order').addEventListener('change',()=>{state.limit=30;renderTable();});
+$('sort-order').addEventListener('change',()=>{state.sortTouched=true;state.limit=30;renderTable();});
+document.querySelector('.table-head').addEventListener('click',e=>{const button=e.target.closest('[data-sort-field]');if(!button)return;const field=button.dataset.sortField,current=sortChoice(),ascending=state.sortTouched&&current.field===field&&!current.ascending;$('sort-order').value=field+(ascending?'-asc':'');state.sortTouched=true;state.limit=30;renderTable();});
 $('service-toggle').addEventListener('change',()=>{resetView();renderTable();});
 function expandRow(e){const r=e.target.closest('[data-expand]');if(!r)return;const key=r.dataset.expand;if(state.expanded.has(key))state.expanded.delete(key);else state.expanded.add(key);renderTable();}
 $('traffic-table').addEventListener('click',expandRow);$('traffic-table').addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.hasAttribute('data-expand')){e.preventDefault();expandRow(e);}});

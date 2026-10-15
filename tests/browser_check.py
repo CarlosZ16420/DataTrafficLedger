@@ -169,6 +169,36 @@ try:
     cdp.call('Input.dispatchKeyEvent', {'type': 'keyDown', 'key': 'ArrowRight', 'code': 'ArrowRight'})
     assert cdp.evaluate("document.activeElement.dataset.point") == '1'
     cdp.evaluate("document.activeElement.blur()")
+    def header_order_ok(field, ascending):
+        # Compare visible DOM rows with independently aggregated raw records, using unrounded bytes.
+        return cdp.evaluate("""(()=>{
+          const field=%s, ascending=%s, view=state.view, sums=new Map();
+          state.data.rows.forEach(r=>{const key=view==='app'?JSON.stringify([r.app,r.path]):view==='node'?r.node:document.getElementById('service-toggle').checked?service(r.host):r.host;
+            if(!sums.has(key))sums.set(key,{up:0,down:0});const g=sums.get(key);g.up+=Number(r.upload);g.down+=Number(r.download);});
+          const actual=[...document.querySelectorAll('.traffic-row:not(.child):not(.grandchild)')].map(row=>{const g=sums.get(row.dataset.expand.slice(view.length+1));return field==='upload'?g.up:field==='download'?g.down:g.up+g.down;});
+          return actual.length>1&&actual.every((value,i)=>i===0||(ascending?actual[i-1]<=value:actual[i-1]>=value));
+        })()""" % (json.dumps(field), str(ascending).lower()))
+
+    # Initial total sorting still starts with descending on the user's first header click.
+    for field in ('total', 'upload', 'download', 'share'):
+        for ascending in (False, True, False):
+            cdp.evaluate("document.querySelector('[data-sort-field=\"%s\"]').click()" % field)
+            assert header_order_ok(field, ascending), f'{field}: wrong header sort direction ({ascending=})'
+            expected = field + ('-asc' if ascending else '')
+            assert cdp.evaluate("document.getElementById('sort-order').value") == expected
+            assert cdp.evaluate("document.querySelector('[data-sort-field=\"%s\"]').getAttribute('aria-pressed')" % field) == 'true'
+            assert cdp.evaluate("document.querySelector('[data-sort-field=\"%s\"] .sort-arrow').textContent" % field) == ('↑' if ascending else '↓')
+    for view in ('node', 'host'):
+        cdp.evaluate("document.querySelector('[data-view=\"%s\"]').click();document.querySelector('[data-sort-field=\"upload\"]').click()" % view)
+        assert header_order_ok('upload', False), f'{view}: header sorting must apply to this view'
+        cdp.evaluate("document.querySelector('[data-sort-field=\"upload\"]').click()")
+        assert header_order_ok('upload', True)
+    cdp.evaluate("document.querySelector('[data-view=app]').click();document.getElementById('sort-order').value='total';document.getElementById('sort-order').dispatchEvent(new Event('change'));document.querySelector('[data-expand]').click()")
+    expanded_key = cdp.evaluate("document.querySelector('[data-expand]').dataset.expand")
+    cdp.evaluate("document.querySelector('[data-sort-field=\"total\"]').click()")
+    assert cdp.evaluate('state.expanded.has('+json.dumps(expanded_key)+')'), 'Sorting must preserve expanded branches'
+    assert cdp.evaluate("(()=>{const key="+json.dumps(expanded_key)+",identity=JSON.parse(key.slice(4)),totals=new Map();state.data.rows.filter(r=>r.app===identity[0]&&r.path===identity[1]).forEach(r=>{const host=document.getElementById('service-toggle').checked?service(r.host):r.host;totals.set(host,(totals.get(host)||0)+Number(r.upload)+Number(r.download))});const row=[...document.querySelectorAll('[data-expand]')].find(r=>r.dataset.expand===key),values=[];for(let next=row.nextElementSibling;next&&next.classList.contains('child');next=next.nextElementSibling)values.push(totals.get(next.dataset.expand.slice(key.length+2)));return values.length===totals.size&&values.every((v,i)=>i===0||values[i-1]<=v)})()"), 'Expanded children should follow ascending sorting while staying under their parent'
+    print('PASS: Clickable total/upload/download/share headers, descending/ascending cycles, synchronized menu, all three views and expanded branches.')
     cdp.evaluate("document.getElementById('sort-order').value='upload';document.getElementById('sort-order').dispatchEvent(new Event('change'))")
     assert cdp.evaluate("(()=>{const groups=groupRows(state.data.rows,r=>JSON.stringify([r.app,r.path]));const top=groups.sort((a,b)=>b.upload-a.upload)[0];return document.querySelector('.traffic-row .row-name').textContent===top.rows[0].app})()"), 'Upload sort did not order applications correctly'
     cdp.evaluate("document.getElementById('sort-order').value='total';document.getElementById('sort-order').dispatchEvent(new Event('change'))")
