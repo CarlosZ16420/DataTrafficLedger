@@ -32,6 +32,7 @@ if(Test-Path -LiteralPath $installedExe){
 }
 Copy-Item -LiteralPath $sourceExe -Destination $installedExe -Force
 Copy-Item -LiteralPath ($sourceExe+'.config') -Destination ($installedExe+'.config') -Force
+if($InstallRoot -ne $sourceRoot){foreach($file in @('Uninstall.cmd','Uninstall.ps1','卸载.ps1')){Copy-Item -LiteralPath (Join-Path $sourceRoot $file) -Destination $InstallRoot -Force}}
 [IO.File]::WriteAllText((Join-Path $appRoot 'portable.json'),'{"data":"../data"}',[Text.UTF8Encoding]::new($false))
 $setup=Start-Process -FilePath $installedExe -ArgumentList @('--install-startup','--data',('"'+$dataRoot+'"')) -WindowStyle Hidden -PassThru
 $setup.WaitForExit()

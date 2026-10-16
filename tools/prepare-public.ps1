@@ -7,7 +7,7 @@ $output=Join-Path $root ('releases\public-export-'+$commit.Substring(0,12))
 if(Test-Path -LiteralPath $output){throw '该版本已导出，请复用已有快照或使用新的提交。'}
 New-Item -ItemType Directory -Path $output -Force | Out-Null
 $archive=Join-Path $root ('releases\public-source-'+$commit.Substring(0,12)+'.zip')
-$allowed=@('.gitattributes','.gitignore','.github','README.md','CHANGELOG.md','LICENSE','build.ps1','package.ps1','install.ps1','安装.cmd','卸载.ps1','src','web','tests','docs','assets','tools')
+$allowed=@('.gitattributes','.gitignore','.github','README.md','CHANGELOG.md','LICENSE','build.ps1','package.ps1','install.ps1','安装.cmd','卸载.ps1','Uninstall.cmd','Uninstall.ps1','src','web','tests','docs','assets','tools')
 $files=@(& git -C $root ls-tree -r --name-only $commit -- @allowed)
 if($LASTEXITCODE -ne 0){throw '无法读取源提交文件清单。'}
 foreach($file in $files){

@@ -1,4 +1,4 @@
-param([string]$Version='1.4.0',[switch]$SkipBuild)
+param([string]$Version='1.5.0',[switch]$SkipBuild)
 $ErrorActionPreference='Stop'
 if($Version -notmatch '^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$'){throw '版本号格式无效。'}
 if(-not $SkipBuild){& (Join-Path $PSScriptRoot 'build.ps1') -Test}
@@ -12,6 +12,7 @@ foreach($file in @('LocalTrafficLedger.exe','LocalTrafficLedger.exe.config')){
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot "dist\$file") -Destination (Join-Path $packageRoot $file)
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'LICENSE') -Destination $packageRoot
+foreach($file in @('Uninstall.cmd','Uninstall.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $file) -Destination $packageRoot}
 [IO.File]::WriteAllText((Join-Path $packageRoot 'portable.json'),'{"data":"data"}',[Text.UTF8Encoding]::new($false))
 $guide=@'
 Local Traffic Ledger
@@ -44,12 +45,16 @@ Collection starts when the application runs. Earlier or missed traffic cannot be
 recovered. Sampling can miss short connections and does not equal a billing meter.
 Path badges and actual proxy node names appear at every level of traffic details.
 
-Update: exit the old version, replace the EXE, EXE.config and portable.json,
+Update: exit the old version, replace program files from the new ZIP,
 and KEEP the data folder.
-Uninstall: disable startup. If Windows collection was enabled, run as administrator:
-LocalTrafficLedger.exe --disable-etw
-Then exit the tray application and remove its folder.
-Deleting data permanently removes your traffic history; back it up first if needed.
+Uninstall: run Uninstall.cmd, or use the uninstall entry in the tray Settings menu.
+Confirm uninstall and choose whether to keep or permanently delete traffic data.
+If Windows collection was authorized, approve administrator access for the SAME
+Windows account. Cleanup removes the approved capture task, login startup task,
+matching shortcuts and program files. Task removal is verified before deleting
+program files. If approval is canceled or cleanup fails, retry the uninstaller.
+Simply deleting the folder does NOT remove Windows scheduled tasks.
+Unknown files in the application folder are kept. Back up history if needed.
 
 Built by AI (OpenAI Codex) from maintainer requirements. Licensed under MIT.
 Source and feedback: https://github.com/CarlosZ16420/LocalTrafficLedger
@@ -63,7 +68,7 @@ $hash=(Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archive=[IO.Compression.ZipFile]::OpenRead($zip)
 try{
-    $expected=@('LICENSE','LocalTrafficLedger.exe','LocalTrafficLedger.exe.config','portable.json','README.txt') | ForEach-Object {"$name/$_"}
+    $expected=@('LICENSE','LocalTrafficLedger.exe','LocalTrafficLedger.exe.config','portable.json','README.txt','Uninstall.cmd','Uninstall.ps1') | ForEach-Object {"$name/$_"}
     $actual=@($archive.Entries | ForEach-Object {$_.FullName.Replace('\','/')})
     if(@(Compare-Object $expected $actual).Count){throw '发布包清单与允许文件不一致。'}
     if(@($actual | Where-Object {$_ -match '[^\x20-\x7e]'}).Count -or $guide -match '[^\x00-\x7f]'){throw 'Release filenames and README.txt must use English ASCII characters.'}

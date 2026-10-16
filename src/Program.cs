@@ -26,9 +26,10 @@ internal static class Program {
         for(int i=0;i<args.Length;i++){if(args[i]=="--data"&&i+1<args.Length)data=Path.GetFullPath(args[++i]);else if(args[i]=="--port"&&i+1<args.Length)port=int.Parse(args[++i]);}
         Directory.CreateDirectory(data);
         try{
+            if(args.Contains("--uninstall")){RequestUninstall();return 0;}
             if(args.Contains("--etw-helper"))return EtwHelper.Run(data);
             if(args.Contains("--setup-etw")){Startup.RegisterEtw(data);Startup.RunEtw();return 0;}
-            if(args.Contains("--disable-etw")){Startup.RemoveEtw();EtwHelper.Stop(data);return 0;}
+            if(args.Contains("--disable-etw")){Startup.RemoveEtw();EtwHelper.Stop(data);var saved=LedgerConfig.Load(data);saved.EtwRequested=false;saved.Save(data);return 0;}
             if(args.Contains("--install-startup")){Startup.Set(true,data);return 0;}
             if(args.Contains("--remove-startup")){Startup.Set(false,data);return 0;}
             if(args.Contains("--stop")){LocalServer.SendQuit(data);EtwHelper.Stop(data);return 0;}
@@ -45,6 +46,13 @@ internal static class Program {
             }return 0;
         }catch(Exception ex){try{File.AppendAllText(Path.Combine(data,"error.log"),DateTime.Now.ToString("s")+" "+ex+Environment.NewLine);}catch{}
             if(!args.Contains("--headless")&&!args.Contains("--etw-helper"))MessageBox.Show("流量账本无法启动：\n"+ex.Message,"流量账本",MessageBoxButtons.OK,MessageBoxIcon.Error);return 1;}
+    }
+    public static void RequestUninstall(){
+        string root=Path.GetDirectoryName(Executable),script=Path.Combine(root,"Uninstall.ps1");
+        if(!File.Exists(script)&&string.Equals(Path.GetFileName(root),"app",StringComparison.OrdinalIgnoreCase))script=Path.Combine(Path.GetDirectoryName(root),"Uninstall.ps1");
+        if(!File.Exists(script))throw new FileNotFoundException("找不到卸载程序，请完整解压新版便携包后运行 Uninstall.cmd。",script);
+        string shell=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),@"WindowsPowerShell\v1.0\powershell.exe");
+        Process.Start(new ProcessStartInfo(shell,"-NoProfile -ExecutionPolicy Bypass -File \""+script+"\""){UseShellExecute=true,WindowStyle=ProcessWindowStyle.Hidden});
     }
 }
 internal static class Startup {
@@ -91,7 +99,7 @@ internal static class Startup {
         var config=LedgerConfig.Load(data);config.EtwRequested=true;config.Save(data);
     }
     public static void RunEtw(){object service=null,folder=null,task=null;try{service=Scheduler();folder=Com(service,"GetFolder",BindingFlags.InvokeMethod,"\\");task=Com(folder,"GetTask",BindingFlags.InvokeMethod,TaskName);Com(task,"Run",BindingFlags.InvokeMethod,new object[]{null});}finally{Release(task);Release(folder);Release(service);}}
-    public static void RemoveEtw(){try{dynamic service=Scheduler();service.GetFolder("\\").DeleteTask(TaskName,0);}catch{}}
+    public static void RemoveEtw(){dynamic service=Scheduler();try{service.GetFolder("\\").DeleteTask(TaskName,0);}catch(System.Runtime.InteropServices.COMException ex){if((uint)ex.HResult!=0x80070002)throw;}}
     public static bool RequestFull(string data){
         if(Program.IsAdmin){RegisterEtw(data);RunEtw();return true;}
         var start=new ProcessStartInfo(Program.Executable,"--setup-etw --data \""+data+"\""){UseShellExecute=true,Verb="runas",WindowStyle=ProcessWindowStyle.Hidden};
@@ -111,6 +119,7 @@ internal sealed class TrayContext : ApplicationContext {
             var settingsMenu=new ToolStripMenuItem("设置");settingsMenu.DropDownItems.Add("打开设置面板…",null,(s,e)=>server.Open(true));
             autoItem=new ToolStripMenuItem("开机自启动（登录 Windows 后）"){Checked=Startup.Enabled};autoItem.Click+=(s,e)=>{try{Startup.Set(!Startup.Enabled,data);autoItem.Checked=Startup.Enabled;}catch(Exception ex){MessageBox.Show(ex.Message,"无法设置自启动");}};settingsMenu.DropDownItems.Add(autoItem);menu.Items.Add(settingsMenu);
             menu.Items.Add("启用 Windows 补充采集…",null,(s,e)=>{try{Startup.RequestFull(data);}catch(System.ComponentModel.Win32Exception ex){if(ex.NativeErrorCode!=1223)MessageBox.Show(ex.Message);}catch(Exception ex){MessageBox.Show(ex.Message);}});
+            settingsMenu.DropDownItems.Add("卸载与清理…",null,(s,e)=>{try{Program.RequestUninstall();}catch(Exception ex){MessageBox.Show(ex.Message,"无法启动卸载程序");}});
             menu.Items.Add("打开数据文件夹",null,(s,e)=>Process.Start(new ProcessStartInfo(data){UseShellExecute=true}));menu.Items.Add(new ToolStripSeparator());menu.Items.Add("退出",null,(s,e)=>ExitThread());
             tray=new NotifyIcon{Icon=icon,Text="流量账本",Visible=true,ContextMenuStrip=menu};tray.MouseClick+=(s,e)=>{if(e.Button==MouseButtons.Left)Open();};
             timer=new System.Windows.Forms.Timer{Interval=5000};timer.Tick+=(s,e)=>{statusItem.Text=collector.Connected?"正在记录 · "+collector.ConnectionCount+" 个活动连接":"Clash 暂未连接 · 历史可查看";autoItem.Checked=Startup.Enabled;};timer.Start();

@@ -8,7 +8,7 @@
 为 Windows 电脑留一本本地流量账本。<br>
 按应用、网站与实际代理节点查看用量，关掉页面也继续记录。
 
-![Version](https://img.shields.io/badge/version-1.4.0-547fec?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.5.0-547fec?style=flat-square)
 ![Windows x64](https://img.shields.io/badge/Windows-10%2F11_x64-172a47?style=flat-square)
 ![Portable](https://img.shields.io/badge/portable-解压即用-169e8d?style=flat-square)
 ![MIT](https://img.shields.io/badge/license-MIT-169e8d?style=flat-square)
@@ -33,7 +33,7 @@
 
 ## 快速开始
 
-1. 在 [Releases](https://github.com/CarlosZ16420/LocalTrafficLedger/releases/latest) 下载 `LocalTrafficLedger-v1.4.0-win-x64-portable.zip`，**完整解压到可写文件夹**。
+1. 在 [Releases](https://github.com/CarlosZ16420/LocalTrafficLedger/releases/latest) 下载 `LocalTrafficLedger-v1.5.0-win-x64-portable.zip`，**完整解压到可写文件夹**。
 2. 双击 `LocalTrafficLedger.exe`。程序进入系统托盘，并用默认浏览器打开仪表盘。
 3. 正常使用网络，稍后刷新即可查看新记录。关闭网页不会停止采集，点击托盘图标可再次打开。
 
@@ -155,8 +155,13 @@ TUN 开启或主采集器状态不明时暂停这部分计量，以免重复计�
 搬家前关闭自启动并退出，移动整个目录后再开启。忘记关闭时，设置中会提示修复旧自启动路径。
 启用过 Windows 补充采集的，移动后需重新授权以更新其任务路径。
 
-卸载前关闭自启动；启用过补充采集的，先以管理员身份运行 `LocalTrafficLedger.exe --disable-etw`，再从托盘退出。
-然后删除程序文件夹。删除 `data/` 会一并删除历史账本；想保留历史可先单独备份。
+卸载请运行包内 **`Uninstall.cmd`**，或托盘右键 → 设置 → **卸载与清理**。确认后选择保留或删除历史账本。
+启用过 Windows 补充采集时，会请求同一 Windows 账户的管理员授权，以删除高权限采集任务。
+卸载会先停止采集，删除并核实专用采集任务、自启动任务，再清理匹配的快捷方式和程序文件。
+取消授权或任务清理失败时会明确报错，保留程序以便重试；不会显示卸载成功。
+
+**直接删除文件夹不会删除 Windows 计划任务**，请先运行卸载入口。历史账本默认可选择保留；选择删除将永久移除 `data/`。
+自行放入目录的其他文件不会被自动删除；如有保留文件，空目录可自行清理。
 
 </details>
 

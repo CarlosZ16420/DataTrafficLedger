@@ -36,12 +36,15 @@ jobs:
       - name: Create clean portable package
         shell: pwsh
         run: |
-          $releaseVersion = '1.4.0'
+          $releaseVersion = '1.5.0'
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$releaseVersion") { throw 'Update the version before tagging.' }
           ./package.ps1 -Version $releaseVersion -SkipBuild
       - name: Verify extraction and portable data migration
         shell: pwsh
         run: ./tests/portable_check.ps1
+      - name: Verify isolated uninstall and task cleanup
+        shell: pwsh
+        run: ./tests/uninstall_check.ps1
       - name: Publish public tagged release
         if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'CarlosZ16420/LocalTrafficLedger'
         shell: pwsh
