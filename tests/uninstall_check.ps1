@@ -1,4 +1,4 @@
-param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\LocalTrafficLedger-v1.5.0-win-x64-portable.zip'))
+param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\DataTrafficLedger-v1.5.1-win-x64-portable.zip'))
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '..\Uninstall.ps1')
 $testRoot=Join-Path $PSScriptRoot ('run-uninstall-'+[Guid]::NewGuid().ToString('N'))
@@ -86,13 +86,19 @@ try{
         try{Invoke-LedgerUninstall $failure $fake -DeleteHistory | Out-Null}catch{$failed=$true}
         Assert-Check ($failed -and (Test-Path -LiteralPath $failure.Exe) -and (Test-Path -LiteralPath (Join-Path $failure.Data 'history.txt'))) ('Cleanup failure deleted files: '+$mode)
     }
-    $other=Fake-Task $failure 'LocalTrafficLedger-ETW-0123456789AB' (Join-Path $keep.App 'LocalTrafficLedger.exe')
+    $legacyExe=Join-Path $failure.App 'LocalTrafficLedger.exe'
+    Copy-Item -LiteralPath $failure.Exe -Destination $legacyExe
+    Copy-Item -LiteralPath ($failure.Exe+'.config') -Destination ($legacyExe+'.config')
+    $legacyContext=Get-LedgerUninstallContext $failure.Root
+    Assert-Check ($legacyContext.Exe -eq $failure.Exe) 'Mixed installation did not prefer the renamed executable.'
+    $legacyTask=Fake-Task $failure 'LocalTrafficLedger-ETW-0123456789AD' $legacyExe
+    $other=Fake-Task $failure 'LocalTrafficLedger-ETW-0123456789AB' (Join-Path $keep.App 'DataTrafficLedger.exe')
     $other.Definition.Principal.UserId='S-1-5-18'
-    $orphan=Fake-Task $failure ('LocalTrafficLedger-Tray-'+$failure.Key) (Join-Path $testRoot 'moved-away\LocalTrafficLedger.exe')
+    $orphan=Fake-Task $failure ('LocalTrafficLedger-Tray-'+$failure.Key) (Join-Path $testRoot 'moved-away\DataTrafficLedger.exe')
     $unrelated=Fake-Task $failure 'AnotherApp-ETW-0123456789AB' $failure.Exe
-    $wrongInstance=Fake-Task $failure 'LocalTrafficLedger-ETW-0123456789AC' (Join-Path $testRoot 'different\LocalTrafficLedger.exe')
-    $selection=@(Get-LedgerTaskPlan (Fake-Folder @($task,$other,$orphan,$unrelated,$wrongInstance)) $failure)
-    Assert-Check ($selection.Count -eq 2 -and $orphan.Name -in $selection.Name) 'Task selection crossed account/application boundaries or missed own moved-folder orphan.'
+    $wrongInstance=Fake-Task $failure 'LocalTrafficLedger-ETW-0123456789AC' (Join-Path $testRoot 'different\DataTrafficLedger.exe')
+    $selection=@(Get-LedgerTaskPlan (Fake-Folder @($task,$legacyTask,$other,$orphan,$unrelated,$wrongInstance)) $failure)
+    Assert-Check ($selection.Count -eq 3 -and $orphan.Name -in $selection.Name -and $legacyTask.Name -in $selection.Name) 'Task selection crossed account/application boundaries or missed legacy/moved-folder tasks.'
     $blocked=$false;try{Get-LedgerDataInventory $failure.Root $keep.Data | Out-Null}catch{$blocked=$true}
     Assert-Check $blocked 'External history path was not blocked.'
     $junction=Join-Path $failure.Data 'link'
@@ -100,6 +106,13 @@ try{
     $blocked=$false;try{Get-LedgerDataInventory $failure.Root $failure.Data | Out-Null}catch{$blocked=$true}
     Assert-Check $blocked 'Data junction was not blocked.'
     Remove-Item -LiteralPath $junction -Force
+    Remove-Item -LiteralPath $failure.Exe,($failure.Exe+'.config')
+    $legacyContext=Get-LedgerUninstallContext $failure.Root
+    Assert-Check ($legacyContext.Exe -eq $legacyExe) 'Legacy-only installation did not find its executable.'
+    $null=Register-TestTask $legacyContext 'ETW'
+    Invoke-TestUninstaller $legacyContext
+    Assert-Check (-not (Test-Path -LiteralPath $legacyExe) -and -not (Test-Path -LiteralPath ($legacyExe+'.config')) -and @(Get-TestTasks).Count -eq 0) 'Legacy executable or its task survived uninstall.'
+    Write-Output 'PASS: English rename retains task identifiers and supports mixed/legacy executable cleanup.'
     Write-Output 'PASS: Permission failure, deletion verification failure, account/path isolation, orphan matching and external/link deletion guards.'
 }finally{
     # Cleanup is restricted to randomly named tasks created by this test invocation.

@@ -17,7 +17,10 @@ function Get-LedgerUninstallContext([string]$Root){
     $dataPath=[IO.Path]::GetFullPath((Join-Path $appPath $location)).TrimEnd('\','/')
     if($dataPath -eq $rootPath -or $dataPath -eq $appPath){throw 'The data folder must be separate from the application folder.'}
     $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value
-    [pscustomobject]@{Root=$rootPath;App=$appPath;Exe=(Join-Path $appPath 'LocalTrafficLedger.exe');Data=$dataPath;Legacy=$legacy;Sid=$sid;Key=(Get-LedgerUserKey $sid)}
+    $executables=@((Join-Path $appPath 'DataTrafficLedger.exe'),(Join-Path $appPath 'LocalTrafficLedger.exe'))
+    $executable=$executables[0]
+    if(-not (Test-Path -LiteralPath $executable) -and (Test-Path -LiteralPath $executables[1])){$executable=$executables[1]}
+    [pscustomobject]@{Root=$rootPath;App=$appPath;Exe=$executable;Executables=$executables;Data=$dataPath;Legacy=$legacy;Sid=$sid;Key=(Get-LedgerUserKey $sid)}
 }
 function Get-LedgerTaskPlan($Folder,$Context){
     foreach($task in $Folder.GetTasks(1)){
@@ -28,9 +31,9 @@ function Get-LedgerTaskPlan($Folder,$Context){
         if($owner -ne $Context.Sid){continue}
         if($definition.Actions.Count -ne 1){continue}
         $action=$definition.Actions.Item(1)
-        if($action.Type -ne 0 -or [IO.Path]::GetFileName($action.Path) -ne 'LocalTrafficLedger.exe'){continue}
+        if($action.Type -ne 0 -or [IO.Path]::GetFileName($action.Path) -notin @('DataTrafficLedger.exe','LocalTrafficLedger.exe')){continue}
         if($action.Arguments -notmatch '(?:^|\s)--(?:etw-helper|background)(?:\s|$)'){continue}
-        $same=[string]::Equals([IO.Path]::GetFullPath($action.Path),$Context.Exe,[StringComparison]::OrdinalIgnoreCase)
+        $same=[IO.Path]::GetFullPath($action.Path) -in $Context.Executables
         # Also remove this user's old orphan entry after a portable folder was moved.
         $orphan=($task.Name -in @(('LocalTrafficLedger-ETW-'+$Context.Key),('LocalTrafficLedger-Tray-'+$Context.Key))) -and -not (Test-Path -LiteralPath $action.Path)
         if($same -or $orphan){[pscustomobject]@{Name=$task.Name;Task=$task;Path=$action.Path;High=([int]$definition.Principal.RunLevel -eq 1)}}
@@ -62,10 +65,10 @@ function Get-LedgerDataInventory([string]$Root,[string]$Data){
 }
 function Remove-LedgerShortcuts($Context,$Plan){
     $shell=New-Object -ComObject WScript.Shell
-    $targets=@($Context.Exe)+@($Plan | ForEach-Object {$_.Path})
+    $targets=@($Context.Executables)+@($Plan | ForEach-Object {$_.Path})
     foreach($directory in @([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('Programs'))){
         if(-not $directory){continue}
-        foreach($name in @('Local Traffic Ledger.lnk',((-join [char[]]@(0x6D41,0x91CF,0x8D26,0x672C))+'.lnk'),((-join [char[]]@(0x672C,0x673A,0x6D41,0x91CF,0x8D26,0x672C))+'.lnk'))){
+        foreach($name in @('Data Traffic Ledger.lnk','Local Traffic Ledger.lnk',((-join [char[]]@(0x6D41,0x91CF,0x8D26,0x672C))+'.lnk'),((-join [char[]]@(0x672C,0x673A,0x6D41,0x91CF,0x8D26,0x672C))+'.lnk'))){
             $path=Join-Path $directory $name
             if((Test-Path -LiteralPath $path) -and $shell.CreateShortcut($path).TargetPath -in $targets){Remove-Item -LiteralPath $path -Force}
         }
@@ -75,13 +78,13 @@ function Remove-LedgerShortcuts($Context,$Plan){
 }
 function Stop-LedgerForUninstall($Context,$Plan){
     foreach($entry in $Plan){$entry.Task.Enabled=$false}
-    if(Test-Path -LiteralPath $Context.Exe){
-        $stop=Start-Process -FilePath $Context.Exe -ArgumentList @('--stop','--data',('"'+$Context.Data+'"')) -WindowStyle Hidden -PassThru
+    foreach($executable in $Context.Executables | Where-Object {Test-Path -LiteralPath $_}){
+        $stop=Start-Process -FilePath $executable -ArgumentList @('--stop','--data',('"'+$Context.Data+'"')) -WindowStyle Hidden -PassThru
         if(-not $stop.WaitForExit(10000) -or $stop.ExitCode -ne 0){throw 'The application did not accept the shutdown request. Program files were kept.'}
     }
     $deadline=[DateTime]::UtcNow.AddSeconds(20)
     do{
-        $running=@(Get-Process -Name LocalTrafficLedger -ErrorAction SilentlyContinue | Where-Object {try{$_.Path -eq $Context.Exe}catch{$false}})
+        $running=@(Get-Process -Name DataTrafficLedger,LocalTrafficLedger -ErrorAction SilentlyContinue | Where-Object {try{$_.Path -in $Context.Executables}catch{$false}})
         if(-not $running.Count){return}
         Start-Sleep -Milliseconds 200
     }while([DateTime]::UtcNow -lt $deadline)
@@ -105,7 +108,7 @@ function Invoke-LedgerUninstall($Context,$Folder,[switch]$DeleteHistory,[switch]
         [IO.File]::WriteAllText((Join-Path $Context.Data 'settings.json'),($settings | ConvertTo-Json),[Text.UTF8Encoding]::new($false))
     }
     if(-not $KeepFiles){
-        $names=@('LocalTrafficLedger.exe','LocalTrafficLedger.exe.config','portable.json')
+        $names=@('DataTrafficLedger.exe','DataTrafficLedger.exe.config','LocalTrafficLedger.exe','LocalTrafficLedger.exe.config','portable.json')
         if(-not $Context.Legacy){$names+=@('LICENSE','README.txt','Uninstall.cmd','Uninstall.ps1')}
         foreach($name in $names){$path=Join-Path $Context.App $name;if(Test-Path -LiteralPath $path){Remove-Item -LiteralPath $path -Force}}
         if((Test-Path -LiteralPath $Context.App) -and -not @(Get-ChildItem -LiteralPath $Context.App -Force).Count){Remove-Item -LiteralPath $Context.App}
@@ -123,10 +126,10 @@ try{
     if($WhatIfPreference){[pscustomobject]@{Executable=$context.Exe;DataDirectory=$context.Data;Tasks=@($plan | ForEach-Object {$_.Name});DeleteData=[bool]$DeleteData;KeepApplicationFiles=[bool]$KeepApplicationFiles} | ConvertTo-Json;exit 0}
     if(-not $Quiet){
         Add-Type -AssemblyName System.Windows.Forms
-        $answer=[Windows.Forms.MessageBox]::Show('Uninstall Local Traffic Ledger? This removes its scheduled tasks, startup entries and shortcuts.','Local Traffic Ledger',[Windows.Forms.MessageBoxButtons]::YesNo,[Windows.Forms.MessageBoxIcon]::Question,[Windows.Forms.MessageBoxDefaultButton]::Button2)
+        $answer=[Windows.Forms.MessageBox]::Show('Uninstall Data Traffic Ledger? This removes its scheduled tasks, startup entries and shortcuts.','Data Traffic Ledger',[Windows.Forms.MessageBoxButtons]::YesNo,[Windows.Forms.MessageBoxIcon]::Question,[Windows.Forms.MessageBoxDefaultButton]::Button2)
         if($answer -ne [Windows.Forms.DialogResult]::Yes){exit 2}
         if(-not $DeleteData){
-            $answer=[Windows.Forms.MessageBox]::Show('Keep your traffic history and settings? Yes = keep data; No = permanently delete data; Cancel = cancel uninstall.','Local Traffic Ledger',[Windows.Forms.MessageBoxButtons]::YesNoCancel,[Windows.Forms.MessageBoxIcon]::Question)
+            $answer=[Windows.Forms.MessageBox]::Show('Keep your traffic history and settings? Yes = keep data; No = permanently delete data; Cancel = cancel uninstall.','Data Traffic Ledger',[Windows.Forms.MessageBoxButtons]::YesNoCancel,[Windows.Forms.MessageBoxIcon]::Question)
             if($answer -eq [Windows.Forms.DialogResult]::Cancel){exit 2};$DeleteData=($answer -eq [Windows.Forms.DialogResult]::No)
         }
     }
@@ -140,7 +143,7 @@ try{
     }else{
         if($PSCmdlet.ShouldProcess($context.Exe,'Remove Windows integration and uninstall')){Invoke-LedgerUninstall $context $folder -DeleteHistory:$DeleteData -KeepFiles:$KeepApplicationFiles | ConvertTo-Json}
     }
-    if(-not $Quiet){$message='Uninstall completed. Scheduled tasks, startup entries and matching shortcuts were removed.';if(-not $DeleteData){$message+="`nHistory was deliberately kept at: "+$context.Data}else{$message+="`nTraffic data was deleted."};[Windows.Forms.MessageBox]::Show($message,'Local Traffic Ledger') | Out-Null}
+    if(-not $Quiet){$message='Uninstall completed. Scheduled tasks, startup entries and matching shortcuts were removed.';if(-not $DeleteData){$message+="`nHistory was deliberately kept at: "+$context.Data}else{$message+="`nTraffic data was deleted."};[Windows.Forms.MessageBox]::Show($message,'Data Traffic Ledger') | Out-Null}
     exit 0
 }catch{
     Write-Error -Message $_.Exception.Message -ErrorAction Continue

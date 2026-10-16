@@ -46,7 +46,7 @@ CSV 最多导出 20 万条，超过时需缩小日期范围。
 ## 数据目录
 
 便携版默认将数据写入 EXE 相邻的 `data/`，由 `portable.json` 指定相对位置。
-从源码直接构建的 EXE 没有该文件时，使用当前用户的 `%LOCALAPPDATA%/LocalTrafficLedger`。
+从源码直接构建的 EXE 没有该文件时，沿用当前用户的 `%LOCALAPPDATA%/LocalTrafficLedger`，以兼容英文改名前的历史账本。
 `--data <目录>` 可覆盖数据位置。原安装脚本的 `app/` 与相邻 `data/` 布局仍受支持。
 
 | 文件 | 用途 |

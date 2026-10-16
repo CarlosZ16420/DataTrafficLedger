@@ -10,7 +10,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 
-namespace LocalTrafficLedger {
+namespace DataTrafficLedger {
 internal sealed class IconCacheStats {
     public bool initialized;
     public long requests, extractions, memoryHits, diskHits, memoryBytes;

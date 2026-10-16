@@ -13,6 +13,10 @@
 `package.ps1` 默认先构建并测试，`-SkipBuild` 只供已验证的构建使用；生成 ZIP、SHA-256 和严格七文件清单（包含卸载入口）。
 `releases/`、`dist/`、`app/`、`data/` 和测试运行数据不进入源码仓库。
 
+英文产品名为 **Data Traffic Ledger**，程序为 `DataTrafficLedger.exe`；公有仓库为 `CarlosZ16420/DataTrafficLedger`，私有开发仓库为 `CarlosZ16420/data-traffic-ledger`。
+为兼容旧版账本和 Windows 集成，非便携数据目录、互斥量、ETW 会话、自启动与采集任务及旧注册表项继续使用 `LocalTrafficLedger` 标识。
+更换 EXE 文件名后需在设置中修复自启动路径，并重新授权已启用的 Windows 补充采集；卸载程序同时识别当前目录中的新旧 EXE。
+
 浏览器验收需要 Python 3 与 Chrome；对虚构数据进行验证：
 
 ```powershell

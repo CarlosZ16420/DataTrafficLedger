@@ -4,7 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 
-namespace LocalTrafficLedger {
+namespace DataTrafficLedger {
 internal sealed class Store : IDisposable {
     private readonly object gate=new object();
     private readonly Sqlite db;

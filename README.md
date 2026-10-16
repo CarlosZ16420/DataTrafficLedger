@@ -1,20 +1,20 @@
 <div align="center">
 <img src="assets/readme/logo.svg" alt="流量账本图标" width="88">
 
-# 流量账本 Local Traffic Ledger
+# 流量账本 Data Traffic Ledger
 
 ### 流量去了哪里，打开账本就知道。
 
 为 Windows 电脑留一本本地流量账本。<br>
 按应用、网站与实际代理节点查看用量，关掉页面也继续记录。
 
-![Version](https://img.shields.io/badge/version-1.5.0-547fec?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.5.1-547fec?style=flat-square)
 ![Windows x64](https://img.shields.io/badge/Windows-10%2F11_x64-172a47?style=flat-square)
 ![Portable](https://img.shields.io/badge/portable-解压即用-169e8d?style=flat-square)
 ![MIT](https://img.shields.io/badge/license-MIT-169e8d?style=flat-square)
 ![AI](https://img.shields.io/badge/built_with-OpenAI_Codex-172a47?style=flat-square)
 
-**[下载 Windows 便携版](https://github.com/CarlosZ16420/LocalTrafficLedger/releases/latest)** · [反馈问题](https://github.com/CarlosZ16420/LocalTrafficLedger/issues) · [更新日志](CHANGELOG.md)
+**[下载 Windows 便携版](https://github.com/CarlosZ16420/DataTrafficLedger/releases/latest)** · [反馈问题](https://github.com/CarlosZ16420/DataTrafficLedger/issues) · [更新日志](CHANGELOG.md)
 
 [快速开始](#快速开始) · [功能介绍](#功能介绍) · [常见问题](#常见问题) · [开发与开源](#开发与开源) · [友链](#友链)
 
@@ -33,11 +33,13 @@
 
 ## 快速开始
 
-1. 在 [Releases](https://github.com/CarlosZ16420/LocalTrafficLedger/releases/latest) 下载 `LocalTrafficLedger-v1.5.0-win-x64-portable.zip`，**完整解压到可写文件夹**。
-2. 双击 `LocalTrafficLedger.exe`。程序进入系统托盘，并用默认浏览器打开仪表盘。
+1. 在 [Releases](https://github.com/CarlosZ16420/DataTrafficLedger/releases/latest) 下载 `DataTrafficLedger-v1.5.1-win-x64-portable.zip`，**完整解压到可写文件夹**。
+2. 双击 `DataTrafficLedger.exe`。程序进入系统托盘，并用默认浏览器打开仪表盘。
 3. 正常使用网络，稍后刷新即可查看新记录。关闭网页不会停止采集，点击托盘图标可再次打开。
 
 发行 ZIP 和包内文件名全部使用英文，离线说明为英文 `README.txt`。应用界面为简体中文，中文名称为“流量账本”。
+
+英文名称 **Data Traffic Ledger** 中的 traffic 指网络数据流量。自 1.5.1 起，程序和发行包使用 `DataTrafficLedger`；从旧版升级时保留 `data/`，退出旧程序后运行新版。若已开启自启动，在设置中修复路径；若已启用 Windows 补充采集，重新授权以更新程序路径。完成后可删除旧的 `LocalTrafficLedger.exe` 及其 `.config`。
 
 无需安装，不需要 Node.js、Python、Docker 或 .NET SDK。运行要求为 **Windows 10/11 x64、.NET Framework 4.8**；Windows 11 自带该运行时，较旧的 Windows 10 需先确认已安装。
 
@@ -188,7 +190,7 @@ TUN 开启或主采集器状态不明时暂停这部分计量，以免重复计�
 展示图工程复用了 [Hamster Archiver](https://github.com/CarlosZ16420/hamster-archiver) 的圆角透明阴影工具，
 可从 [截图工程](tools/showcase/README.md) 重新生成。计量实现参考官方 [Mihomo API](https://wiki.metacubex.one/api/) 与 Windows ETW 文档。
 
-欢迎 [提交问题或建议](https://github.com/CarlosZ16420/LocalTrafficLedger/issues)，请附版本、操作步骤与错误信息，并隐去私人路径、域名和节点名称。
+欢迎 [提交问题或建议](https://github.com/CarlosZ16420/DataTrafficLedger/issues)，请附版本、操作步骤与错误信息，并隐去私人路径、域名和节点名称。
 
 ## 友链
 

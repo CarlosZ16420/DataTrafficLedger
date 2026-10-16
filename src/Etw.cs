@@ -10,7 +10,7 @@ using System.Security.Principal;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace LocalTrafficLedger {
+namespace DataTrafficLedger {
 internal struct FlowKey : IEquatable<FlowKey> {
     public int Pid;public byte Family,Protocol;public ulong Address1,Address2;public long Bucket;
     public bool Equals(FlowKey o){return Pid==o.Pid&&Family==o.Family&&Protocol==o.Protocol&&Address1==o.Address1&&Address2==o.Address2&&Bucket==o.Bucket;}
@@ -75,7 +75,7 @@ internal sealed class EtwCapture : IDisposable {
         Dictionary<FlowKey,FlowBytes> batch;lock(gate){batch=flows;flows=new Dictionary<FlowKey,FlowBytes>();}
         var result=new List<Usage>();
         foreach(var pair in batch){var identity=Identify(pair.Key.Pid);string name=identity.Name.ToLowerInvariant();
-            if(name=="verge-mihomo.exe"||name=="mihomo.exe"||name=="clash.exe"||name=="localtrafficledger.exe")continue;
+            if(name=="verge-mihomo.exe"||name=="mihomo.exe"||name=="clash.exe"||name=="localtrafficledger.exe"||name=="datatrafficledger.exe")continue;
             string ip=pair.Key.Ip();result.Add(new Usage{Bucket=pair.Key.Bucket,Upload=pair.Value.Upload,Download=pair.Value.Download,Dimension=new Dimension{Source="windows",App=identity.Name,Path=identity.Path,Host=ip,Ip=ip,Node="未经过 Clash",Route="BYPASS",Network=pair.Key.Protocol==6?"tcp":"udp",Rule="Windows 网络事件；IP 级统计",Chain="[]"}});
         }return result;
     }

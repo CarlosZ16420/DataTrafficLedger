@@ -12,13 +12,13 @@ New-Item -ItemType Directory -Path $outputRoot -Force | Out-Null
 $references = @('mscorlib.dll','System.dll','System.Core.dll','System.Drawing.dll','System.Windows.Forms.dll','System.Web.Extensions.dll','System.Net.Http.dll','Microsoft.CSharp.dll') | ForEach-Object { '/reference:' + (Join-Path $frameworkRoot $_) }
 $sources = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'src') -Filter '*.cs' | ForEach-Object FullName
 $resources = Get-ChildItem -LiteralPath (Join-Path $projectRoot 'web') -File | ForEach-Object { '/resource:' + $_.FullName + ',web.' + $_.Name }
-& dotnet $compiler /nologo /utf8output /langversion:10 /unsafe /optimize+ /platform:x64 /target:winexe "/out:$outputRoot\LocalTrafficLedger.exe" "/win32manifest:$projectRoot\src\app.manifest" @references @resources @sources
+& dotnet $compiler /nologo /utf8output /langversion:10 /unsafe /optimize+ /platform:x64 /target:winexe "/out:$outputRoot\DataTrafficLedger.exe" "/win32manifest:$projectRoot\src\app.manifest" @references @resources @sources
 if ($LASTEXITCODE -ne 0) { throw '编译失败' }
-Copy-Item -LiteralPath (Join-Path $projectRoot 'src\app.config') -Destination (Join-Path $outputRoot 'LocalTrafficLedger.exe.config') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'src\app.config') -Destination (Join-Path $outputRoot 'DataTrafficLedger.exe.config') -Force
 if ($Test) {
-    & dotnet $compiler /nologo /utf8output /langversion:10 /unsafe /platform:x64 /target:exe "/out:$outputRoot\LedgerTests.exe" /main:LocalTrafficLedger.Tests @references @resources @sources (Join-Path $projectRoot 'tests\Tests.cs')
+    & dotnet $compiler /nologo /utf8output /langversion:10 /unsafe /platform:x64 /target:exe "/out:$outputRoot\LedgerTests.exe" /main:DataTrafficLedger.Tests @references @resources @sources (Join-Path $projectRoot 'tests\Tests.cs')
     if ($LASTEXITCODE -ne 0) { throw '测试编译失败' }
     & "$outputRoot\LedgerTests.exe"
     if ($LASTEXITCODE -ne 0) { throw '测试失败' }
 }
-Get-Item -LiteralPath "$outputRoot\LocalTrafficLedger.exe" | Select-Object FullName,Length
+Get-Item -LiteralPath "$outputRoot\DataTrafficLedger.exe" | Select-Object FullName,Length

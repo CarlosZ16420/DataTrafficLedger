@@ -10,7 +10,7 @@ using System.Threading;
 using System.Drawing;
 using System.Drawing.Imaging;
 
-namespace LocalTrafficLedger {
+namespace DataTrafficLedger {
 internal static class Tests {
     private static int passed;
     private static void Assert(bool value,string name){if(!value)throw new Exception("FAIL: "+name);passed++;Console.WriteLine("PASS "+name);}

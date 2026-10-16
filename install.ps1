@@ -1,13 +1,13 @@
 param([switch]$NoLaunch,[switch]$EnableWindowsCapture,[string]$ImportData,[string]$InstallRoot)
 $ErrorActionPreference='Stop'
 $sourceRoot=$PSScriptRoot
-$sourceExe=Join-Path $sourceRoot 'dist\LocalTrafficLedger.exe'
+$sourceExe=Join-Path $sourceRoot 'dist\DataTrafficLedger.exe'
 if(-not (Test-Path -LiteralPath $sourceExe)){throw '请先运行 build.ps1，或使用包含 dist 文件夹的完整安装包。'}
 if(-not $InstallRoot){$InstallRoot=$sourceRoot}
 $InstallRoot=[IO.Path]::GetFullPath($InstallRoot)
 $dataRoot=Join-Path $InstallRoot 'data'
 $appRoot=Join-Path $InstallRoot 'app'
-$installedExe=Join-Path $appRoot 'LocalTrafficLedger.exe'
+$installedExe=Join-Path $appRoot 'DataTrafficLedger.exe'
 New-Item -ItemType Directory -Path $appRoot -Force | Out-Null
 New-Item -ItemType Directory -Path $dataRoot -Force | Out-Null
 if($ImportData -and -not (Test-Path -LiteralPath (Join-Path $dataRoot 'traffic.db'))){
@@ -19,12 +19,13 @@ if($ImportData -and -not (Test-Path -LiteralPath (Join-Path $dataRoot 'traffic.d
     $inputStream=[IO.File]::OpenRead($sourceDatabase)
     try{$outputStream=[IO.File]::Create((Join-Path $dataRoot 'traffic.db'));try{$inputStream.CopyTo($outputStream)}finally{$outputStream.Dispose()}}finally{$inputStream.Dispose()}
 }
-if(Test-Path -LiteralPath $installedExe){
-    $stopProcess=Start-Process -FilePath $installedExe -ArgumentList '--stop' -WindowStyle Hidden -PassThru
+$previousExecutables=@($installedExe,(Join-Path $appRoot 'LocalTrafficLedger.exe'))
+foreach($previousExe in $previousExecutables | Where-Object {Test-Path -LiteralPath $_}){
+    $stopProcess=Start-Process -FilePath $previousExe -ArgumentList @('--stop','--data',('"'+$dataRoot+'"')) -WindowStyle Hidden -PassThru
     if(-not $stopProcess.WaitForExit(10000)){throw '旧版本没有及时响应，请从托盘退出后再安装。'}
     $deadline=[DateTime]::UtcNow.AddSeconds(12)
     do {
-        $running=@(Get-Process -Name LocalTrafficLedger -ErrorAction SilentlyContinue | Where-Object { try{$_.Path -eq $installedExe}catch{$false} })
+        $running=@(Get-Process -Name DataTrafficLedger,LocalTrafficLedger -ErrorAction SilentlyContinue | Where-Object { try{$_.Path -eq $previousExe}catch{$false} })
         if(-not $running.Count){break}
         Start-Sleep -Milliseconds 300
     } while([DateTime]::UtcNow -lt $deadline)

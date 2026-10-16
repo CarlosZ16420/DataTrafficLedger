@@ -36,7 +36,7 @@ jobs:
       - name: Create clean portable package
         shell: pwsh
         run: |
-          $releaseVersion = '1.5.0'
+          $releaseVersion = '1.5.1'
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$releaseVersion") { throw 'Update the version before tagging.' }
           ./package.ps1 -Version $releaseVersion -SkipBuild
       - name: Verify extraction and portable data migration
@@ -46,11 +46,11 @@ jobs:
         shell: pwsh
         run: ./tests/uninstall_check.ps1
       - name: Publish public tagged release
-        if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'CarlosZ16420/LocalTrafficLedger'
+        if: startsWith(github.ref, 'refs/tags/v') && github.repository == 'CarlosZ16420/DataTrafficLedger'
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view $env:GITHUB_REF_NAME *> $null
           if ($LASTEXITCODE -eq 0) { Write-Output 'Release already exists; keeping its verified assets.'; exit 0 }
-          gh release create $env:GITHUB_REF_NAME releases/*.zip releases/*.sha256 --verify-tag --title "Local Traffic Ledger $env:GITHUB_REF_NAME" --generate-notes
+          gh release create $env:GITHUB_REF_NAME releases/*.zip releases/*.sha256 --verify-tag --title "Data Traffic Ledger $env:GITHUB_REF_NAME" --generate-notes

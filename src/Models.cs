@@ -7,7 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Web.Script.Serialization;
 
-namespace LocalTrafficLedger {
+namespace DataTrafficLedger {
 internal static class Json {
     public static string Write(object value) { return new JavaScriptSerializer { MaxJsonLength = 32 * 1024 * 1024 }.Serialize(value); }
     public static Dictionary<string, object> Read(string text) { return new JavaScriptSerializer { MaxJsonLength = 32 * 1024 * 1024 }.Deserialize<Dictionary<string, object>>(text); }

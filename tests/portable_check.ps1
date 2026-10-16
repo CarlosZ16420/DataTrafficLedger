@@ -1,4 +1,4 @@
-param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\LocalTrafficLedger-v1.5.0-win-x64-portable.zip'))
+param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\DataTrafficLedger-v1.5.1-win-x64-portable.zip'))
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archiveReader=[IO.Compression.ZipFile]::OpenRead([IO.Path]::GetFullPath($Archive))
@@ -16,7 +16,7 @@ Expand-Archive -LiteralPath $Archive -DestinationPath $extract
 $appDirectory=(Get-ChildItem -LiteralPath $extract -Directory | Select-Object -First 1).FullName
 $taskProcess=$null
 function Start-Portable([string]$directory){
-    $exe=Join-Path $directory 'LocalTrafficLedger.exe'
+    $exe=Join-Path $directory 'DataTrafficLedger.exe'
     $script:taskProcess=Start-Process -FilePath $exe -ArgumentList '--headless' -WindowStyle Hidden -PassThru
     $runtime=Join-Path $directory 'data\runtime.json'
     $deadline=[DateTime]::UtcNow.AddSeconds(15)
@@ -36,7 +36,7 @@ function Stop-Portable($state){
 try{
     $state=Start-Portable $appDirectory
     $status=Request-Portable $state '/api/status'
-    if(-not $status.portable -or $status.version -ne '1.5.0' -or $status.dataDirectory -ne (Join-Path $appDirectory 'data')){throw '便携数据位置错误。'}
+    if(-not $status.portable -or $status.version -ne '1.5.1' -or $status.dataDirectory -ne (Join-Path $appDirectory 'data')){throw '便携数据位置错误。'}
     Request-Portable $state '/api/preferences?theme=dark&autoRefresh=true' -Post | Out-Null
     Stop-Portable $state
     $moved=Join-Path $testRoot '搬迁后 新目录'

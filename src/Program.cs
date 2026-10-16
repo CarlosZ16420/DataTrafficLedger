@@ -12,10 +12,11 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
-namespace LocalTrafficLedger {
+namespace DataTrafficLedger {
 internal static class Program {
     public static readonly string UserSid,UserKey;
     static Program(){using(var identity=WindowsIdentity.GetCurrent())UserSid=identity.User.Value;using(var hash=SHA256.Create())UserKey=BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(UserSid))).Replace("-","").Substring(0,12);}
+    // Keep persisted integration identifiers compatible with releases before the English rename.
     public static string MutexName(string data){using(var hash=SHA256.Create())return @"Local\LocalTrafficLedger."+UserKey+"."+BitConverter.ToString(hash.ComputeHash(Encoding.UTF8.GetBytes(Path.GetFullPath(data).ToUpperInvariant()))).Replace("-","").Substring(0,16);}
     public static string Executable {get{return Assembly.GetExecutingAssembly().Location;}}
     public static bool IsAdmin {get{using(var identity=WindowsIdentity.GetCurrent())return new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator);}}

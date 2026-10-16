@@ -329,7 +329,7 @@ try:
 
         def screenshot(name, width=1440, height=1080, expression=None):
             cdp.call('Emulation.setDeviceMetricsOverride', {'width': width, 'height': height, 'deviceScaleFactor': 1, 'mobile': width < 500})
-            cdp.evaluate("window.scrollTo({top:0,behavior:'instant'});document.querySelector('.eyebrow').textContent='DEMO DATA · 演示数据，非真实访问记录';document.getElementById('data-directory').textContent='数据位置：D:/LocalTrafficLedger/data（演示目录）'")
+            cdp.evaluate("window.scrollTo({top:0,behavior:'instant'});document.querySelector('.eyebrow').textContent='DEMO DATA · 演示数据，非真实访问记录';document.getElementById('data-directory').textContent='数据位置：D:/DataTrafficLedger/data（演示目录）'")
             time.sleep(.3)
             options = {'captureBeyondViewport': True}
             if expression:

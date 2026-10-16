@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
-namespace LocalTrafficLedger {
+namespace DataTrafficLedger {
 internal sealed class MihomoClient {
     public string PipeName="";
     public uint ServerPid;

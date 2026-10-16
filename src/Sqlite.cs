@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace LocalTrafficLedger {
+namespace DataTrafficLedger {
 // Windows 10/11 ships winsqlite3. No bundled database server or native package.
 internal sealed class Sqlite : IDisposable {
     private IntPtr db;
