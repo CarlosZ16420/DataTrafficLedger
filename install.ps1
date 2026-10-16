@@ -39,16 +39,18 @@ if($setup.ExitCode -ne 0){throw '自启动设置失败。'}
 $shortcutShell=New-Object -ComObject WScript.Shell
 foreach($shortcutRoot in @([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('Programs'))){
     if(-not $shortcutRoot){continue}
-    $shortcut=$shortcutShell.CreateShortcut((Join-Path $shortcutRoot '本机流量账本.lnk'))
+    $shortcut=$shortcutShell.CreateShortcut((Join-Path $shortcutRoot '流量账本.lnk'))
     $shortcut.TargetPath=$installedExe
     $shortcut.Arguments='--open --data "'+$dataRoot+'"'
     $shortcut.WorkingDirectory=$appRoot
     $shortcut.Description='查看这台电脑的应用、网站和代理节点流量历史'
     $shortcut.IconLocation=$installedExe+',0'
     $shortcut.Save()
+    $legacyPath=Join-Path $shortcutRoot '本机流量账本.lnk'
+    if(Test-Path -LiteralPath $legacyPath){$legacy=$shortcutShell.CreateShortcut($legacyPath);if($legacy.TargetPath -eq $installedExe){Remove-Item -LiteralPath $legacyPath}}
 }
 if(-not $NoLaunch){Start-Process -FilePath $installedExe -ArgumentList @('--background','--data',('"'+$dataRoot+'"')) -WindowStyle Hidden}
 if($EnableWindowsCapture){
     Start-Process -FilePath $installedExe -ArgumentList @('--setup-etw','--data',('"'+$dataRoot+'"')) -Verb RunAs -WindowStyle Hidden
 }
-[pscustomobject]@{Application=$installedExe;Data=$dataRoot;Startup='已启用，登录后在托盘运行';Shortcut='桌面和开始菜单：本机流量账本'} | ConvertTo-Json
+[pscustomobject]@{Application=$installedExe;Data=$dataRoot;Startup='已启用，登录后在托盘运行';Shortcut='桌面和开始菜单：流量账本'} | ConvertTo-Json

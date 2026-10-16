@@ -36,6 +36,7 @@ python tests\browser_check.py tests\live-demo --showcase
 4. 在公有仓库发布版本与便携包，附同名 `.sha256`。
 
 公开快照采用允许文件列表；用户数据库、运行凭据、日志、个人浏览器资料、旧版本和本地路径记录不会同步。
+发行 ZIP 和包内文件名均为英文 ASCII，离线说明使用英文 README.txt；打包与便携测试同时校验这一要求。
 GitHub workflow 支持手动验证和标签发布。维护时更新 `src/Server.cs` 的版本、README、CHANGELOG 与包版本。
 
 `tools/prepare-public.ps1 -SourceRef origin/main` 从已提交版本的允许列表导出独立快照到被忽略的 `releases/`，

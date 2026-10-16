@@ -66,7 +66,7 @@ PRAGMA user_version=1;");
             var trendArgs=new List<object>{step,step};trendArgs.AddRange(contextArgs);
             var trend=db.Query("SELECT (t.bucket / ?) * ? bucket,SUM(t.upload) upload,SUM(t.download) download"+join+" GROUP BY 1 ORDER BY 1",trendArgs.ToArray());
             var kinds=db.Query("SELECT d.source,d.route,SUM(t.upload) upload,SUM(t.download) download"+join+" GROUP BY d.source,d.route",args.ToArray());
-            var applicationRoutes=db.Query("SELECT DISTINCT d.app,d.path,d.source,d.route"+join,args.ToArray());
+            var applicationRoutes=db.Query("SELECT DISTINCT d.app,d.path,d.host,d.node,d.source,d.route"+join,args.ToArray());
             var global=db.Query("SELECT COALESCE(SUM(upload),0) upload,COALESCE(SUM(download),0) download,COALESCE(SUM(attributed_upload),0) attributedUpload,COALESCE(SUM(attributed_download),0) attributedDownload FROM core_totals WHERE bucket>=? AND bucket<?",q.From,q.To)[0];
             var events=db.Query("SELECT at,kind,detail FROM events WHERE at>=? AND at<? ORDER BY at DESC,id DESC LIMIT 100",q.From,q.To);
             var nodes=db.Query("SELECT DISTINCT d.node FROM traffic t JOIN dimensions d ON t.dimension=d.id WHERE t.bucket>=? AND t.bucket<? AND d.source='mihomo' ORDER BY d.node",trendFrom,trendTo).Select(r=>r["node"]).ToArray();

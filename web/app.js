@@ -123,9 +123,12 @@ function renderSortHeaders(){const sort=sortChoice();document.querySelectorAll('
 function routeInfo(r){return r.source==='windows'?{key:'windows',label:'Clash 外',className:'windows',order:2}:r.route==='DIRECT'?{key:'direct',label:'直连',className:'direct',order:1}:r.route==='PROXY'?{key:'proxy',label:'代理',className:'proxy',order:0}:r.route==='REJECT'?{key:'reject',label:'拒绝',className:'other',order:3}:{key:'other',label:'其他路线',className:'other',order:4};}
 function routeTag(r){const tag=routeInfo(r);return `<span class="route-tag ${tag.className}">${tag.label}</span>`;}
 function routeTags(rows){const tags=new Map();rows.forEach(r=>{const info=routeInfo(r);if(!tags.has(info.key))tags.set(info.key,{info,row:r});});return [...tags.values()].sort((a,b)=>a.info.order-b.info.order).map(t=>routeTag(t.row)).join('');}
-function rowHtml(g,key,title,subtitle,level,icon,expandable,tag='',applicationId=''){
+function proxyNodes(rows){return [...new Set(rows.filter(r=>r.source==='mihomo'&&r.route==='PROXY').map(r=>r.node).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'zh-CN'));}
+function rowHtml(g,key,title,subtitle,level,icon,expandable,tag='',applicationId='',routeRows=null){
   const total=Number(state.data.summary.upload)+Number(state.data.summary.download),share=total?(g.upload+g.download)/total*100:0,open=state.expanded.has(key);
-  return `<div class="traffic-row ${level===1?'child':level===2?'grandchild':''} ${expandable?'expandable':''} ${open?'expanded':''}" ${expandable?`data-expand="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"`:''}><div class="row-identity">${expandable?`<span class="chevron" aria-hidden="true">${open?'⌄':'›'}</span>`:''}${level===2?'':`<span class="app-icon ${icon}"><span class="app-icon-fallback" aria-hidden="true">${esc(icon==='node'?'↗':icon==='domain'?'◈':title.slice(0,1).toUpperCase())}</span>${applicationId?`<img data-icon-id="${esc(applicationId)}" alt="" width="48" height="48" decoding="async">`:''}</span>`}<div class="identity-text"><div class="row-title" title="${esc(title)}"><span class="row-name">${esc(title)}</span>${tag?`<span class="row-tags" aria-label="当前筛选内的流量路径">${tag}</span>`:''}</div><div class="row-subtitle" title="${esc(subtitle)}">${esc(subtitle)}</div></div></div><span class="number total">${bytes(g.upload+g.download)}</span><span class="number">${bytes(g.upload)}</span><span class="number">${bytes(g.download)}</span><span class="share-cell">${share.toFixed(1)}%<svg class="share-bar" viewBox="0 0 100 4" aria-hidden="true"><rect class="share-background" width="100" height="4" rx="2"/><rect class="share-fill" width="${Math.min(100,share).toFixed(2)}" height="4" rx="2"/></svg></span></div>`;
+  const nodes=level<2&&!(level===0&&state.view==='node')?proxyNodes(routeRows||g.rows):[];
+  const nodeLabels=nodes.length?`<div class="row-nodes" aria-label="实际代理节点">${nodes.map(node=>`<span class="node-tag" title="${esc(node)}"><span aria-hidden="true">↗</span> ${esc(node)}</span>`).join('')}</div>`:'';
+  return `<div class="traffic-row ${level===1?'child':level===2?'grandchild':''} ${expandable?'expandable':''} ${open?'expanded':''}" ${expandable?`data-expand="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"`:''}><div class="row-identity">${expandable?`<span class="chevron" aria-hidden="true">${open?'⌄':'›'}</span>`:''}${level===2?'':`<span class="app-icon ${icon}"><span class="app-icon-fallback" aria-hidden="true">${esc(icon==='node'?'↗':icon==='domain'?'◈':title.slice(0,1).toUpperCase())}</span>${applicationId?`<img data-icon-id="${esc(applicationId)}" alt="" width="48" height="48" decoding="async">`:''}</span>`}<div class="identity-text"><div class="row-title" title="${esc(title)}"><span class="row-name">${esc(title)}</span>${tag?`<span class="row-tags" aria-label="当前筛选内的流量路径">${tag}</span>`:''}</div><div class="row-subtitle" title="${esc(subtitle)}">${esc(subtitle)}</div>${nodeLabels}</div></div><span class="number total">${bytes(g.upload+g.download)}</span><span class="number">${bytes(g.upload)}</span><span class="number">${bytes(g.download)}</span><span class="share-cell">${share.toFixed(1)}%<svg class="share-bar" viewBox="0 0 100 4" aria-hidden="true"><rect class="share-background" width="100" height="4" rx="2"/><rect class="share-fill" width="${Math.min(100,share).toFixed(2)}" height="4" rx="2"/></svg></span></div>`;
 }
 const iconQueue=[];let activeIconLoads=0;
 const iconObserver=new IntersectionObserver(entries=>{entries.forEach(entry=>{if(entry.isIntersecting){iconObserver.unobserve(entry.target);iconQueue.push(entry.target);}});pumpIcons();},{rootMargin:'80px 0px'});
@@ -141,18 +144,23 @@ function pumpIcons(){
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)pumpIcons();});
 function renderTable(){
   if(!state.data)return;const rows=state.data.rows,view=state.view,merge=$('service-toggle').checked;
-  const appRoutes=new Map();(state.data.applicationRoutes||rows).forEach(r=>{const key=JSON.stringify([r.app,r.path]);if(!appRoutes.has(key))appRoutes.set(key,[]);appRoutes.get(key).push(r);});
-  const roots=sortTableGroups(groupRows(rows,r=>view==='app'?JSON.stringify([r.app,r.path]):view==='node'?r.node:merge?service(r.host):r.host),g=>view==='app'?g.rows[0].app:g.key);
+  const rootKey=r=>view==='app'?JSON.stringify([r.app,r.path]):view==='node'?r.node:merge?service(r.host):r.host;
+  const childKeyOf=r=>view==='app'?(merge?service(r.host):r.host):JSON.stringify([r.app,r.path]);
+  const routes=new Map(),childRoutes=new Map();
+  (state.data.applicationRoutes||rows).forEach(r=>{const root=rootKey(r),child=JSON.stringify([root,childKeyOf(r)]);if(!routes.has(root))routes.set(root,[]);routes.get(root).push(r);if(!childRoutes.has(child))childRoutes.set(child,[]);childRoutes.get(child).push(r);});
+  const roots=sortTableGroups(groupRows(rows,rootKey),g=>view==='app'?g.rows[0].app:g.key);
   renderSortHeaders();
   $('record-count').textContent=roots.length;$('dimension-heading').textContent=view==='app'?'应用 / 网站 / 节点':view==='node'?'节点 / 应用 / 网站':'网站 / 应用 / 节点';
   if(!rows.length){$('traffic-table').innerHTML='<div class="empty-state"><span class="empty-icon">↗</span><strong>这里还没有记录</strong><p>记录从应用首次运行开始。你可以正常使用网络后刷新，或调整日期与筛选条件。Clash 外流量需要先在设置中启用 Windows 补充采集。</p></div>';$('table-description').textContent='首次启动之前的历史无法补回。';$('show-more').hidden=true;observeApplicationIcons();return;}
   let html='';roots.slice(0,state.limit).forEach((g,index)=>{
     const first=g.rows[0],key=`${view}:${g.key}`,title=view==='app'?first.app:g.key;const nodes=new Set(g.rows.map(r=>r.node));const subtitle=view==='app'?(first.path||`${nodes.size} 个出口 · ${new Set(g.rows.map(r=>r.host)).size} 个域名`):view==='node'?`${new Set(g.rows.map(r=>r.app)).size} 个应用 · ${new Set(g.rows.map(r=>r.host)).size} 个域名`:`${new Set(g.rows.map(r=>r.app)).size} 个应用 · ${nodes.size} 个出口`;
-    html+=rowHtml(g,key,title,subtitle,0,view==='node'?'node':view==='host'?'domain':first.app.toLowerCase().includes('chrome')?'chrome':'',true,view==='app'?routeTags(appRoutes.get(g.key)||g.rows):'',view==='app'&&first.path?first.id:'');
+    const rootRoutes=routes.get(g.key)||g.rows;
+    html+=rowHtml(g,key,title,subtitle,0,view==='node'?'node':view==='host'?'domain':first.app.toLowerCase().includes('chrome')?'chrome':'',true,routeTags(rootRoutes),view==='app'&&first.path?first.id:'',rootRoutes);
     if(!state.expanded.has(key))return;
-    const children=sortTableGroups(groupRows(g.rows,r=>view==='app'?(merge?service(r.host):r.host):JSON.stringify([r.app,r.path])),child=>view==='app'?child.key:child.rows[0].app);
+    const children=sortTableGroups(groupRows(g.rows,childKeyOf),child=>view==='app'?child.key:child.rows[0].app);
     children.forEach(child=>{const r=child.rows[0],childKey=key+'::'+child.key,childTitle=view==='app'?child.key:r.app,childSub=view==='app'?`${new Set(child.rows.map(v=>v.host)).size} 个域名 · ${new Set(child.rows.map(v=>v.node)).size} 个出口`:(r.path||'展开查看域名和节点');
-      html+=rowHtml(child,childKey,childTitle,childSub,1,view==='app'?'domain':'',true,'',view!=='app'&&r.path?r.id:'');
+      const branchRoutes=childRoutes.get(JSON.stringify([g.key,child.key]))||child.rows;
+      html+=rowHtml(child,childKey,childTitle,childSub,1,view==='app'?'domain':'',true,routeTags(branchRoutes),view!=='app'&&r.path?r.id:'',branchRoutes);
       if(!state.expanded.has(childKey))return;
       sortTableGroups(groupRows(child.rows,r=>JSON.stringify([r.host,r.node,r.source,r.route])),leaf=>leaf.rows[0].host).forEach(leaf=>{const l=leaf.rows[0];html+=rowHtml(leaf,'',l.host,l.node+(l.source==='windows'?' · 无法从加密连接确定域名':` · ${l.network.toUpperCase()}`),2,'',false,routeTag(l));});
     });

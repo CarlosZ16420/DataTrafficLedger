@@ -1,5 +1,14 @@
-param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\LocalTrafficLedger-v1.3.1-win-x64-portable.zip'))
+param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\LocalTrafficLedger-v1.4.0-win-x64-portable.zip'))
 $ErrorActionPreference='Stop'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$archiveReader=[IO.Compression.ZipFile]::OpenRead([IO.Path]::GetFullPath($Archive))
+try{
+    if(@($archiveReader.Entries | Where-Object {$_.FullName -match '[^\x20-\x7e]'}).Count){throw 'Release package filenames must be English ASCII.'}
+    $guideEntry=$archiveReader.Entries | Where-Object {$_.FullName.Replace('\','/').EndsWith('/README.txt')}
+    if(-not $guideEntry){throw 'English README.txt is missing.'}
+    $reader=[IO.StreamReader]::new($guideEntry.Open());try{$guide=$reader.ReadToEnd()}finally{$reader.Dispose()}
+    if($guide -match '[^\x00-\x7f]' -or -not $guide.Contains('administrator approval ONCE')){throw 'README.txt must contain English setup and authorization guidance.'}
+}finally{$archiveReader.Dispose()}
 $testRoot=Join-Path $PSScriptRoot ('run-portable-'+[Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 $extract=Join-Path $testRoot '解压 即用'
@@ -27,7 +36,7 @@ function Stop-Portable($state){
 try{
     $state=Start-Portable $appDirectory
     $status=Request-Portable $state '/api/status'
-    if(-not $status.portable -or $status.version -ne '1.3.1' -or $status.dataDirectory -ne (Join-Path $appDirectory 'data')){throw '便携数据位置错误。'}
+    if(-not $status.portable -or $status.version -ne '1.4.0' -or $status.dataDirectory -ne (Join-Path $appDirectory 'data')){throw '便携数据位置错误。'}
     Request-Portable $state '/api/preferences?theme=dark&autoRefresh=true' -Post | Out-Null
     Stop-Portable $state
     $moved=Join-Path $testRoot '搬迁后 新目录'

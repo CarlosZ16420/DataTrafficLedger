@@ -44,7 +44,7 @@ internal static class Program {
                 }finally{singleton.ReleaseMutex();}
             }return 0;
         }catch(Exception ex){try{File.AppendAllText(Path.Combine(data,"error.log"),DateTime.Now.ToString("s")+" "+ex+Environment.NewLine);}catch{}
-            if(!args.Contains("--headless")&&!args.Contains("--etw-helper"))MessageBox.Show("本机流量账本无法启动：\n"+ex.Message,"本机流量账本",MessageBoxButtons.OK,MessageBoxIcon.Error);return 1;}
+            if(!args.Contains("--headless")&&!args.Contains("--etw-helper"))MessageBox.Show("流量账本无法启动：\n"+ex.Message,"流量账本",MessageBoxButtons.OK,MessageBoxIcon.Error);return 1;}
     }
 }
 internal static class Startup {
@@ -62,7 +62,7 @@ internal static class Startup {
     public static void Set(bool enable,string data){
         dynamic service=Scheduler();dynamic folder=service.GetFolder("\\");
         if(enable){
-            string sid=Program.UserSid;dynamic task=service.NewTask(0);task.RegistrationInfo.Description="本机流量账本：登录后在托盘只读记录本机流量。";
+            string sid=Program.UserSid;dynamic task=service.NewTask(0);task.RegistrationInfo.Description="流量账本：登录后在托盘只读记录本机流量。";
             task.Principal.UserId=sid;task.Principal.LogonType=3;task.Principal.RunLevel=0;
             task.Settings.Enabled=true;task.Settings.DisallowStartIfOnBatteries=false;task.Settings.StopIfGoingOnBatteries=false;task.Settings.ExecutionTimeLimit="PT0S";task.Settings.MultipleInstances=2;
             dynamic trigger=task.Triggers.Create(9);trigger.UserId=sid;trigger.Delay="PT5S";
@@ -80,7 +80,7 @@ internal static class Startup {
     public static void RegisterEtw(string data){
         if(!Program.IsAdmin)throw new UnauthorizedAccessException("启用 Windows 网络事件采集需要管理员权限。");
         dynamic service=Scheduler();dynamic task=service.NewTask(0);string sid=Program.UserSid;
-        task.RegistrationInfo.Description="本机流量账本：只读记录 Windows 网络事件，不修改路由、防火墙或 Clash 配置。";
+        task.RegistrationInfo.Description="流量账本：只读记录 Windows 网络事件，不修改路由、防火墙或 Clash 配置。";
         task.Principal.UserId=sid;task.Principal.LogonType=3;task.Principal.RunLevel=1;
         task.Settings.Enabled=true;task.Settings.Hidden=true;task.Settings.DisallowStartIfOnBatteries=false;task.Settings.StopIfGoingOnBatteries=false;task.Settings.ExecutionTimeLimit="PT0S";task.Settings.MultipleInstances=2;
         // Demand-start only: the unelevated tray application starts this approved helper.
@@ -112,7 +112,7 @@ internal sealed class TrayContext : ApplicationContext {
             autoItem=new ToolStripMenuItem("开机自启动（登录 Windows 后）"){Checked=Startup.Enabled};autoItem.Click+=(s,e)=>{try{Startup.Set(!Startup.Enabled,data);autoItem.Checked=Startup.Enabled;}catch(Exception ex){MessageBox.Show(ex.Message,"无法设置自启动");}};settingsMenu.DropDownItems.Add(autoItem);menu.Items.Add(settingsMenu);
             menu.Items.Add("启用 Windows 补充采集…",null,(s,e)=>{try{Startup.RequestFull(data);}catch(System.ComponentModel.Win32Exception ex){if(ex.NativeErrorCode!=1223)MessageBox.Show(ex.Message);}catch(Exception ex){MessageBox.Show(ex.Message);}});
             menu.Items.Add("打开数据文件夹",null,(s,e)=>Process.Start(new ProcessStartInfo(data){UseShellExecute=true}));menu.Items.Add(new ToolStripSeparator());menu.Items.Add("退出",null,(s,e)=>ExitThread());
-            tray=new NotifyIcon{Icon=icon,Text="本机流量账本",Visible=true,ContextMenuStrip=menu};tray.MouseClick+=(s,e)=>{if(e.Button==MouseButtons.Left)Open();};
+            tray=new NotifyIcon{Icon=icon,Text="流量账本",Visible=true,ContextMenuStrip=menu};tray.MouseClick+=(s,e)=>{if(e.Button==MouseButtons.Left)Open();};
             timer=new System.Windows.Forms.Timer{Interval=5000};timer.Tick+=(s,e)=>{statusItem.Text=collector.Connected?"正在记录 · "+collector.ConnectionCount+" 个活动连接":"Clash 暂未连接 · 历史可查看";autoItem.Checked=Startup.Enabled;};timer.Start();
         }
         SystemEvents.SessionEnding+=SessionEnding;

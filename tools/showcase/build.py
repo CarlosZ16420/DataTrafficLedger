@@ -9,7 +9,7 @@ import hamster_frames as frames
 ROOT = Path(__file__).resolve().parent
 frames.SOURCE_ROOT = ROOT / 'sources'
 frames.PREVIEW_ROOT = ROOT / 'output'
-frames.WINDOW_SOURCES = {key: key for key in ('dashboard-light', 'dashboard-dark', 'details', 'settings', 'mobile', 'trend-selection', 'time-range')}
+frames.WINDOW_SOURCES = {key: key for key in ('dashboard-light', 'dashboard-dark', 'details', 'settings', 'mobile', 'trend-selection', 'time-range', 'website-routes')}
 frames.CARD_BORDER_COLOR = '#e4eaf2'
 frames.SHADOW_COLOR = (23, 42, 71, 36)
 frames.WINDOW_MARGIN = 40

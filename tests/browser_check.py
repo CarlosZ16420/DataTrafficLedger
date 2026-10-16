@@ -131,7 +131,7 @@ try:
             break
         time.sleep(.2)
     assert cdp.evaluate("Boolean(state.data && state.status)"), 'Page failed to load data'
-    assert cdp.evaluate("document.title") == '本机流量账本'
+    assert cdp.evaluate("document.title") == '流量账本'
     assert cdp.evaluate("document.querySelectorAll('.traffic-row').length") > 0, 'No live records shown'
     cdp.evaluate("document.querySelector('.traffic-row').scrollIntoView({block:'center'})")
     for _ in range(50):
@@ -223,6 +223,30 @@ try:
 
     assert cdp.evaluate("document.querySelectorAll('.traffic-row:not(.child):not(.grandchild) .row-tags').length") > 0, 'Application route badges missing'
     assert cdp.evaluate("(()=>{const rows=[...document.querySelectorAll('.traffic-row:not(.child):not(.grandchild)')];return rows.every(row=>{const app=row.querySelector('.row-name').textContent;const namePath=JSON.parse(row.dataset.expand.slice(4));const routes=state.data.applicationRoutes.filter(r=>r.app===app&&r.path===namePath[1]);const labels=[...new Set(routes.map(r=>r.source==='windows'?'Clash 外':r.route==='DIRECT'?'直连':r.route==='PROXY'?'代理':r.route==='REJECT'?'拒绝':'其他路线'))];return labels.length==row.querySelectorAll('.route-tag').length&&labels.every(label=>[...row.querySelectorAll('.route-tag')].some(t=>t.textContent===label))})})()"), 'Application badges must reflect all routes within active filters'
+    for view in ('app', 'host', 'node'):
+        cdp.evaluate("document.querySelector('[data-view=\"%s\"]').click();[...document.querySelectorAll('#traffic-table [data-expand]')].forEach(r=>{if(r.getAttribute('aria-expanded')==='false')state.expanded.add(r.dataset.expand)});renderTable()" % view)
+        assert cdp.evaluate("""(()=>{
+          const view=state.view, merge=document.getElementById('service-toggle').checked;
+          const roots=groupRows(state.data.rows,r=>view==='app'?JSON.stringify([r.app,r.path]):view==='node'?r.node:merge?service(r.host):r.host);
+          function check(row,records,showNodes){
+            const labels=[...new Set(records.map(r=>r.source==='windows'?'Clash 外':r.route==='DIRECT'?'直连':r.route==='PROXY'?'代理':r.route==='REJECT'?'拒绝':'其他路线'))];
+            const badges=[...row.querySelectorAll('.route-tag')].map(t=>t.textContent);
+            if(labels.length!==badges.length||!labels.every(label=>badges.includes(label)))return false;
+            const expected=showNodes?[...new Set(records.filter(r=>r.source==='mihomo'&&r.route==='PROXY').map(r=>r.node).filter(Boolean))]:[];
+            const actual=[...row.querySelectorAll('.node-tag')].map(t=>t.title);
+            return expected.length===actual.length&&expected.every(node=>actual.includes(node));
+          }
+          return roots.every(root=>{
+            const key=view+':'+root.key,row=[...document.querySelectorAll('[data-expand]')].find(r=>r.dataset.expand===key);
+            if(!row||!check(row,root.rows,view!=='node'))return false;
+            const children=groupRows(root.rows,r=>view==='app'?(merge?service(r.host):r.host):JSON.stringify([r.app,r.path]));
+            return children.every(child=>{const childRow=[...document.querySelectorAll('[data-expand]')].find(r=>r.dataset.expand===key+'::'+child.key);return childRow&&check(childRow,child.rows,true)});
+          });
+        })()"""), f'{view}: every parent and child must show all route types and actual proxy nodes before leaf expansion'
+    cdp.evaluate("document.querySelector('[data-view=host]').click();document.getElementById('service-toggle').click()")
+    assert cdp.evaluate("[...document.querySelectorAll('.traffic-row:not(.child):not(.grandchild)')].filter(r=>r.querySelector('.row-name').textContent==='www.youtube.com').every(r=>r.querySelector('.route-tag.proxy')&&r.querySelector('.route-tag.direct')&&r.querySelector('.node-tag'))"), 'Unmerged websites should expose mixed routes and proxy nodes too'
+    cdp.evaluate("document.getElementById('service-toggle').click();document.querySelector('[data-view=app]').click()")
+    print('PASS: Route badges and actual proxy nodes at website/application roots and all child branches, including mixed paths and multiple nodes.')
 
     cdp.evaluate("document.getElementById('range-picker-button').click()")
     assert cdp.evaluate("!document.getElementById('range-picker').hidden&&document.getElementById('range-whole-days').checked")
@@ -339,6 +363,9 @@ try:
                 break
             time.sleep(.1)
         screenshot('details', height=900, expression="(()=>{const r=document.getElementById('details').getBoundingClientRect();return {x:r.x-12,y:r.y-12,width:r.width+24,height:r.height+24}})()")
+        cdp.evaluate("document.querySelector('[data-view=host]').click();const youtube=[...document.querySelectorAll('[data-expand]')].find(r=>r.querySelector('.row-name').textContent==='YouTube');if(youtube)youtube.click()")
+        screenshot('website-routes', height=900, expression="(()=>{const r=document.getElementById('details').getBoundingClientRect();return {x:r.x-12,y:r.y-12,width:r.width+24,height:r.height+24}})()")
+        cdp.evaluate("document.querySelector('[data-view=app]').click();document.querySelector('[data-expand]').click()")
         screenshot('mobile', width=390, height=1440)
         assert cdp.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
         cdp.evaluate("settingsVisible(true)")

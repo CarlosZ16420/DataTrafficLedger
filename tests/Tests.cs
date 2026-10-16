@@ -40,7 +40,9 @@ internal static class Tests {
                     new Dimension{App="Telegram.exe",Host="149.154.167.220",Node="Windows 网络事件",Source="windows",Route="WINDOWS"},
                     new Dimension{App="explorer.exe",Path=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),"explorer.exe"),Host="download.windowsupdate.com",Node="DIRECT",Route="DIRECT"},
                     new Dimension{App="chrome.exe",Path=chrome,Host="chatgpt.com",Node="🇯🇵 日本 · Tokyo 01"},
-                    new Dimension{App="chrome.exe",Path=chrome,Host="www.bilibili.com",Node="DIRECT",Route="DIRECT"}};
+                    new Dimension{App="chrome.exe",Path=chrome,Host="www.bilibili.com",Node="DIRECT",Route="DIRECT"},
+                    new Dimension{App="chrome.exe",Path=chrome,Host="www.youtube.com",Node="DIRECT",Route="DIRECT"},
+                    new Dimension{App="chrome.exe",Path=chrome,Host="video.googlevideo.com",Node="🇯🇵 日本 · Tokyo 02"}};
                 long day=Clock.DateBoundary(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd"),false);
                 var facts=new List<Usage>();var totals=new List<TimedDelta>();
                 for(int i=0;i<132;i++){if(i>=60&&i<72)continue;long bucket=day+7*3600+i*300;long coreUp=0,coreDown=0;
@@ -130,6 +132,8 @@ internal static class Tests {
             Assert(Json.Num(Json.Obj(data,"core"),"download")==50,"Core totals use the same selected minute boundaries as application totals");
             Assert(Json.Array(data,"trend").OfType<Dictionary<string,object>>().Sum(r=>Json.Num(r,"download"))==100,"Trend retains unfiltered time context so a third click can choose a new start outside the old selection");
             Assert(Json.Array(data,"applicationRoutes").OfType<Dictionary<string,object>>().Select(r=>Json.Str(r,"route")).Distinct().Count()==2,"An application's route summary contains both direct and proxy routes in the selected time range");
+            var routeFacts=Json.Array(data,"applicationRoutes").OfType<Dictionary<string,object>>().ToArray();
+            Assert(routeFacts.Any(r=>Json.Str(r,"host")=="example.com"&&Json.Str(r,"node")=="日本 A")&&routeFacts.Any(r=>Json.Str(r,"host")=="direct.example"&&Json.Str(r,"node")=="DIRECT"),"Full route metadata retains original hosts and actual nodes for website and nested branch summaries");
             string csv=store.Csv(q);Assert(csv.Contains("15:45:00")&&csv.Contains("15:46:00")&&!csv.Contains("15:44:00")&&!csv.Contains("15:47:00"),"CSV export honors the exact same minute range");
             q.Scope="proxy";data=Json.Read(Json.Write(store.Stats(q)));Assert(Json.Array(data,"applicationRoutes").OfType<Dictionary<string,object>>().All(r=>Json.Str(r,"route")=="PROXY"),"Application badges follow active source filters instead of reporting historical routes outside the query");
         }
@@ -193,7 +197,7 @@ internal static class Tests {
             string image=Request(server.Port,"/api/icon?id="+Uri.EscapeDataString(dim.Id),cookie);
             Assert(image.StartsWith("HTTP/1.1 200")&&image.Contains("Content-Type: image/png")&&image.Contains("private, max-age=300"),"Recorded application icons are served as privately cacheable PNG images");
             Assert(Request(server.Port,"/api/icon?id="+Uri.EscapeDataString(Convert.ToBase64String(new byte[32])),cookie).StartsWith("HTTP/1.1 204"),"Unknown application icons return an empty response for the letter fallback");
-            Assert(Request(server.Port,"/",cookie).Contains("本机流量账本"),"HTML and assets are embedded in the native executable");
+            Assert(Request(server.Port,"/",cookie).Contains("流量账本"),"HTML and assets are embedded in the native executable");
             using(var client=new TcpClient("127.0.0.1",server.Port))using(var s=client.GetStream()){byte[] request=Encoding.ASCII.GetBytes("GET /api/status HTTP/1.1\r\nHost: attacker.example:"+server.Port+"\r\n"+cookie+"\r\n");s.Write(request,0,request.Length);using(var r=new StreamReader(s))Assert(r.ReadToEnd().StartsWith("HTTP/1.1 403"),"Unexpected Host headers are rejected against DNS rebinding");}
             server.Dispose();server.Dispose();collector.Dispose();collector.Dispose();Assert(true,"Repeated Windows application-context disposal is safe");
         }

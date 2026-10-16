@@ -2,14 +2,14 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="light dark"><title>本机流量账本</title>
+  <meta name="color-scheme" content="light dark"><title>流量账本</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23131f31'/%3E%3Cpath d='M6 23l6-9 6 5 8-12' fill='none' stroke='%233ecfae' stroke-width='3'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script>
 </head>
 <body>
 <div class="shell">
   <header class="header">
-    <a class="brand" href="/" aria-label="本机流量账本首页"><span class="brand-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m6 23 6-9 6 5 8-12"/></svg></span><span>本机流量账本<small>LOCAL TRAFFIC LEDGER</small></span></a>
+    <a class="brand" href="/" aria-label="流量账本首页"><span class="brand-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m6 23 6-9 6 5 8-12"/></svg></span><span>流量账本<small>LOCAL TRAFFIC LEDGER</small></span></a>
     <nav class="main-nav" aria-label="页面导航"><a href="#overview" class="active">总览</a><a href="#details">流量明细</a><a href="#history">记录状态</a></nav>
     <div class="header-right"><span id="capture-status" class="capture-status"><i></i>正在连接</span><button class="button icon-button" id="theme-button" aria-label="切换到深色主题" title="切换主题">◐</button><button class="button" id="settings-button" aria-expanded="false" aria-controls="settings-panel">设置 <span aria-hidden="true">⚙</span></button></div>
   </header>
@@ -19,7 +19,7 @@
       <div class="panel-heading"><div><h2>应用设置</h2><p>关闭页面后继续记录，退出托盘程序才会停止。</p></div><button class="text-button" id="close-settings" aria-label="关闭设置">关闭 ×</button></div>
       <label class="setting-row"><span><strong>开机自启动</strong><small id="startup-description">登录 Windows 后在托盘运行，不自动打开页面。</small></span><input type="checkbox" id="startup-toggle" role="switch"></label>
       <div class="setting-row" id="startup-repair-row" hidden><span><strong>自启动路径需要更新</strong><small>程序位置已改变，点击修复，将自启动关联到当前目录。</small></span><button class="button" id="repair-startup">修复自启动</button></div>
-      <div class="setting-row"><span><strong>Windows 补充采集</strong><small id="windows-status">检查状态中…</small></span><button class="button" id="enable-windows">启用补充采集</button></div>
+      <div class="setting-row"><span><strong>Windows 补充采集</strong><small id="windows-status">检查状态中…</small><small>首次授权一次，后续启动无需重复授权。开启开机自启动后，登录 Windows 自动恢复；搬迁目录或任务被删除后需重新授权。</small></span><button class="button" id="enable-windows">启用补充采集</button></div>
       <label class="setting-row"><span><strong>页面自动刷新</strong><small>每 15 秒刷新；页面在后台时暂停刷新。</small></span><input type="checkbox" id="auto-refresh-toggle" role="switch"></label>
       <label class="setting-row"><span><strong>外观主题</strong><small>主题与刷新偏好保存在本机，端口变化后仍然保留。</small></span><select id="theme-select" aria-label="外观主题"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></label>
       <div class="setting-row endpoint-setting"><span><strong>本地访问端口</strong><small id="endpoint-description">自动选择空闲端口，从托盘打开即可。</small></span><div class="endpoint-controls"><select id="port-mode" aria-label="端口分配方式"><option value="auto">自动选择（推荐）</option><option value="fixed">指定端口</option></select><input id="port-number" type="number" min="1024" max="65535" step="1" value="18793" aria-label="指定端口号" hidden><button class="button" id="save-port">保存</button></div></div>

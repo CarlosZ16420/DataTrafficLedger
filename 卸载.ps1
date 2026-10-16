@@ -15,7 +15,7 @@ try{$userKey=([BitConverter]::ToString($sha.ComputeHash([Text.Encoding]::UTF8.Ge
 try{Unregister-ScheduledTask -TaskName ('LocalTrafficLedger-ETW-'+$userKey) -Confirm:$false -ErrorAction Stop}catch{Write-Host '若启用过 Windows 补充采集，请以管理员身份再次运行此脚本，以移除其专用计划任务。'}
 try{Unregister-ScheduledTask -TaskName ('LocalTrafficLedger-Tray-'+$userKey) -Confirm:$false -ErrorAction Stop}catch{}
 foreach($shortcutRoot in @([Environment]::GetFolderPath('DesktopDirectory'),[Environment]::GetFolderPath('Programs'))){
-    if($shortcutRoot){$shortcut=Join-Path $shortcutRoot '本机流量账本.lnk';if(Test-Path -LiteralPath $shortcut){Remove-Item -LiteralPath $shortcut}}
+    if($shortcutRoot){foreach($name in @('流量账本.lnk','本机流量账本.lnk')){$shortcut=Join-Path $shortcutRoot $name;if(Test-Path -LiteralPath $shortcut){Remove-Item -LiteralPath $shortcut}}}
 }
 if(-not $KeepApplicationFiles){
     # Delete only these two known binaries. The data directory and historical ledger are retained.

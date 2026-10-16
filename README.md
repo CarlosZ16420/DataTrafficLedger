@@ -1,14 +1,14 @@
 <div align="center">
-<img src="assets/readme/logo.svg" alt="本机流量账本图标" width="88">
+<img src="assets/readme/logo.svg" alt="流量账本图标" width="88">
 
-# 本机流量账本 Local Traffic Ledger
+# 流量账本 Local Traffic Ledger
 
 ### 流量去了哪里，打开账本就知道。
 
 为 Windows 电脑留一本本地流量账本。<br>
 按应用、网站与实际代理节点查看用量，关掉页面也继续记录。
 
-![Version](https://img.shields.io/badge/version-1.3.1-547fec?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.4.0-547fec?style=flat-square)
 ![Windows x64](https://img.shields.io/badge/Windows-10%2F11_x64-172a47?style=flat-square)
 ![Portable](https://img.shields.io/badge/portable-解压即用-169e8d?style=flat-square)
 ![MIT](https://img.shields.io/badge/license-MIT-169e8d?style=flat-square)
@@ -22,7 +22,7 @@
 
 哪个应用用了最多流量？看视频走了哪个节点？昨天的用量还能查到吗？
 
-本机流量账本读取 Clash Verge / Mihomo 的本机连接统计，将用量持续保存在 SQLite 中。
+流量账本读取 Clash Verge / Mihomo 的本机连接统计，将用量持续保存在 SQLite 中。
 从总览进入应用，再展开网站、原始域名和当时的实际节点，逐层查清流量去向。
 
 **不需要账号，不上传账本，没有遥测；程序、网页和图标都在本机运行。**
@@ -33,9 +33,11 @@
 
 ## 快速开始
 
-1. 在 [Releases](https://github.com/CarlosZ16420/LocalTrafficLedger/releases/latest) 下载 `LocalTrafficLedger-v1.3.1-win-x64-portable.zip`，**完整解压到可写文件夹**。
+1. 在 [Releases](https://github.com/CarlosZ16420/LocalTrafficLedger/releases/latest) 下载 `LocalTrafficLedger-v1.4.0-win-x64-portable.zip`，**完整解压到可写文件夹**。
 2. 双击 `LocalTrafficLedger.exe`。程序进入系统托盘，并用默认浏览器打开仪表盘。
 3. 正常使用网络，稍后刷新即可查看新记录。关闭网页不会停止采集，点击托盘图标可再次打开。
+
+发行 ZIP 和包内文件名全部使用英文，离线说明为英文 `README.txt`。应用界面为简体中文，中文名称为“流量账本”。
 
 无需安装，不需要 Node.js、Python、Docker 或 .NET SDK。运行要求为 **Windows 10/11 x64、.NET Framework 4.8**；Windows 11 自带该运行时，较旧的 Windows 10 需先确认已安装。
 
@@ -54,11 +56,15 @@
 | 什么时候用得最多 | 上下行趋势、单时段峰值；悬停查看用量，两次点击直接筛选时间区间 |
 | 流量从哪里经过 | 代理、Clash 直连、Clash 外的独立用量与占比 |
 | 哪个应用、网站或节点用得多 | 切换三种明细视图；点击总流量、上传、下载、占比表头，首次降序、再次升序；菜单另提供名称排序 |
-| 同一个应用走了哪些路径 | 应用名称旁同时标出代理、直连、Clash 外等路径标签，随当前筛选变化 |
+| 应用或网站走了哪些路径、代理节点 | 顶层和每级分支同时标出代理、直连、Clash 外等路径；实际代理节点直接列出，多节点全部显示 |
 | 具体访问了什么，走了哪个节点 | 展开应用 → 网站分组 → 原始域名与实际节点；支持日本节点筛选、指定节点与搜索 |
 | 需要自己留档或继续分析 | 按当前日期和筛选导出 CSV；采集启动、中断和恢复另有状态记录 |
 
 [![展开明细，查看网站、原始域名和实际节点，截图为演示数据](assets/readme/details-showcase.zh-CN.png)](assets/readme/details-showcase.zh-CN.png)
+
+按网站查看时，也可直接在网站和应用分支上看到路径与所有实际代理节点，无需展开到最底层。
+
+[![网站与应用分支直接显示混合路径和多个代理节点，截图为演示数据](assets/readme/website-routes-showcase.zh-CN.png)](assets/readme/website-routes-showcase.zh-CN.png)
 
 ### 在趋势图上，直接圈定想看的时间
 
@@ -99,6 +105,17 @@
 [![设置面板：自启动、补充采集、主题与端口](assets/readme/settings-showcase.zh-CN.png)](assets/readme/settings-showcase.zh-CN.png)
 
 ## 常见问题
+
+<details>
+<summary>Windows 补充采集每次开机都要授权吗？</summary>
+
+正常情况下只需首次授权一次。授权创建本应用专用的高权限计划任务，之后托盘程序每次启动会调用该任务，无需重复弹出管理员授权。
+开启应用“开机自启动”后，登录 Windows 会自动恢复；关闭自启动时则需手动启动应用。
+
+移动程序或数据目录、更换 Windows 用户、任务被删除或被系统策略禁用后，需要重新启用并授权。
+在原位置替换新版程序并保留 `data/`，通常无需重新授权。TUN 开启时补充采集会暂时暂停，避免重复计量，这不表示授权失效。
+
+</details>
 
 <details>
 <summary>能恢复安装前的流量，或与运营商账单逐字节对齐吗？</summary>
