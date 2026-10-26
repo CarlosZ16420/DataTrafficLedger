@@ -41,6 +41,7 @@
       <div class="filter-summary" id="filter-summary" hidden><span id="active-filters"></span><button class="text-button" id="reset-filters">清除筛选 ×</button></div>
     </section>
     <div id="message" class="message" role="status" hidden></div>
+    <div id="loading-status" class="loading-status" role="status" aria-live="polite" hidden><span id="loading-label">正在汇总全部记录…</span><span class="loading-track" role="progressbar" aria-label="正在加载流量统计"><span></span></span></div>
     <section class="metrics" aria-label="流量摘要">
       <article class="metric main-metric"><div class="metric-label">已归属流量 <span>当前筛选</span></div><div class="metric-value" id="total-value">—</div><div class="metric-bottom"><span id="total-upload">↑ —</span><span id="total-download">↓ —</span></div></article>
       <article class="metric"><div class="metric-label"><span class="dot blue"></span>通过代理 <span class="metric-symbol" aria-hidden="true">↗</span></div><div class="metric-value" id="proxy-value">—</div><div class="metric-note" id="proxy-note">按连接的实际节点统计</div></article>
@@ -61,7 +62,7 @@
         <span><button class="column-sort" data-sort-field="upload" data-sort-label="上传" aria-pressed="false">上传 <span class="sort-arrow" aria-hidden="true">↕</span></button></span>
         <span><button class="column-sort" data-sort-field="download" data-sort-label="下载" aria-pressed="false">下载 <span class="sort-arrow" aria-hidden="true">↕</span></button></span>
         <span><button class="column-sort" data-sort-field="share" data-sort-label="占比" aria-pressed="false">占比 <span class="sort-arrow" aria-hidden="true">↕</span></button></span>
-      </div><div id="traffic-table"></div><div class="table-bottom"><span id="table-description"></span><button class="text-button" id="show-more" hidden>显示更多</button></div></section>
+      </div><div id="traffic-table" aria-busy="false"></div><div class="table-bottom"><span id="table-description"></span><div class="page-buttons"><button class="text-button" id="previous-page" hidden>上一页</button><button class="text-button" id="show-more" hidden>下一页</button></div></div></section>
     <section class="panel history-panel" id="history"><div class="panel-heading"><div><h2>记录状态</h2><p>采集启动、中断与恢复都会留下时间记录。</p></div><span class="history-note">北京时间 · UTC+8</span></div><div id="history-list" class="history-list"></div></section>
     <footer><span><i class="footer-lock" aria-hidden="true">◈</i> 数据留在本机 · 无遥测 · 无外部资源</span><span id="footer-status">后台采集与页面刷新独立运行</span></footer>
   </main>

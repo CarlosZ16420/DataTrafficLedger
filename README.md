@@ -8,7 +8,7 @@
 为 Windows 电脑留一本本地流量账本。<br>
 按应用、网站与实际代理节点查看用量，关掉页面也继续记录。
 
-![Version](https://img.shields.io/badge/version-1.5.1-547fec?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.6.0-547fec?style=flat-square)
 ![Windows x64](https://img.shields.io/badge/Windows-10%2F11_x64-172a47?style=flat-square)
 ![Portable](https://img.shields.io/badge/portable-解压即用-169e8d?style=flat-square)
 ![MIT](https://img.shields.io/badge/license-MIT-169e8d?style=flat-square)
@@ -33,7 +33,7 @@
 
 ## 快速开始
 
-1. 在 [Releases](https://github.com/CarlosZ16420/DataTrafficLedger/releases/latest) 下载 `DataTrafficLedger-v1.5.1-win-x64-portable.zip`，**完整解压到可写文件夹**。
+1. 在 [Releases](https://github.com/CarlosZ16420/DataTrafficLedger/releases/latest) 下载 `DataTrafficLedger-v1.6.0-win-x64-portable.zip`，**完整解压到可写文件夹**。
 2. 双击 `DataTrafficLedger.exe`。程序进入系统托盘，并用默认浏览器打开仪表盘。
 3. 正常使用网络，稍后刷新即可查看新记录。关闭网页不会停止采集，点击托盘图标可再次打开。
 
@@ -65,6 +65,8 @@
 [![展开明细，查看网站、原始域名和实际节点，截图为演示数据](assets/readme/details-showcase.zh-CN.png)](assets/readme/details-showcase.zh-CN.png)
 
 按网站查看时，也可直接在网站和应用分支上看到路径与所有实际代理节点，无需展开到最底层。
+
+各层用量、占比和热门网站排行覆盖当前筛选下的全部记录。明细每页 30 项，展开后按需加载下一层，各层均支持翻页；大范围统计会显示加载进度，后台继续记录流量。
 
 [![网站与应用分支直接显示混合路径和多个代理节点，截图为演示数据](assets/readme/website-routes-showcase.zh-CN.png)](assets/readme/website-routes-showcase.zh-CN.png)
 

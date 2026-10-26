@@ -8,6 +8,9 @@ namespace DataTrafficLedger {
 internal sealed class Store : IDisposable {
     private readonly object gate=new object();
     private readonly Sqlite db;
+    private readonly object statisticsGate=new object();
+    private readonly Dictionary<string,StatisticsSnapshot> snapshots=new Dictionary<string,StatisticsSnapshot>();
+    private long snapshotAccess;
     public readonly string FilePath;
     public Store(string directory) {
         Directory.CreateDirectory(directory);FilePath=Path.Combine(directory,"traffic.db");db=new Sqlite(FilePath);
@@ -43,7 +46,7 @@ PRAGMA user_version=1;");
         }
     }
     public void Prune(int days) { lock(gate){long cutoff=Clock.Minute(Clock.Now-days*86400L);db.Execute("BEGIN IMMEDIATE");try{db.Run("DELETE FROM traffic WHERE bucket<?",cutoff);db.Run("DELETE FROM core_totals WHERE bucket<?",cutoff);db.Run("DELETE FROM events WHERE at<?",cutoff);db.Execute("DELETE FROM dimensions WHERE id NOT IN (SELECT DISTINCT dimension FROM traffic); COMMIT; PRAGMA wal_checkpoint(PASSIVE);");}catch{db.Execute("ROLLBACK");throw;}} }
-    private static string Where(Query q,List<object> args) {
+    internal static string Where(Query q,List<object> args) {
         var where="t.bucket>=? AND t.bucket<?";args.Add(q.From);args.Add(q.To);
         if(q.Scope=="proxy")where+=" AND d.source='mihomo' AND d.route='PROXY'";
         else if(q.Scope=="direct")where+=" AND d.source='mihomo' AND d.route='DIRECT'";
@@ -54,24 +57,19 @@ PRAGMA user_version=1;");
         if(q.Japan)where+=" AND d.source='mihomo' AND d.route='PROXY' AND (instr(d.node,'日本')>0 OR instr(d.node,'🇯🇵')>0 OR instr(lower(d.node),'japan')>0 OR instr(lower(d.node),'[jp]')>0)";
         return where;
     }
-    public object Stats(Query q) {
-        lock(gate) {
-            var args=new List<object>();string where=Where(q,args);string join=" FROM traffic t JOIN dimensions d ON d.id=t.dimension WHERE "+where;
-            var summary=db.Query("SELECT COALESCE(SUM(t.upload),0) upload,COALESCE(SUM(t.download),0) download,COUNT(DISTINCT d.app) applications,COUNT(DISTINCT d.host) hosts,MIN(t.bucket) first,MAX(t.bucket) last"+join,args.ToArray())[0];
-            var rows=db.Query("SELECT d.id,d.source,d.app,d.path,d.host,d.ip,d.node,d.route,d.network,d.rule,d.chain,SUM(t.upload) upload,SUM(t.download) download,MIN(t.bucket) first,MAX(t.bucket) last"+join+" GROUP BY d.id ORDER BY SUM(t.upload+t.download) DESC LIMIT 5001",args.ToArray());
-            bool truncated=rows.Count>5000;if(truncated)rows.RemoveAt(5000);
-            long trendFrom=q.TrendTo>q.TrendFrom?q.TrendFrom:q.From,trendTo=q.TrendTo>q.TrendFrom?q.TrendTo:q.To;
-            long step=trendTo-trendFrom>3*86400?3600: trendTo-trendFrom>86400?900:300;
-            var contextArgs=new List<object>(args);contextArgs[0]=trendFrom;contextArgs[1]=trendTo;
-            var trendArgs=new List<object>{step,step};trendArgs.AddRange(contextArgs);
-            var trend=db.Query("SELECT (t.bucket / ?) * ? bucket,SUM(t.upload) upload,SUM(t.download) download"+join+" GROUP BY 1 ORDER BY 1",trendArgs.ToArray());
-            var kinds=db.Query("SELECT d.source,d.route,SUM(t.upload) upload,SUM(t.download) download"+join+" GROUP BY d.source,d.route",args.ToArray());
-            var applicationRoutes=db.Query("SELECT DISTINCT d.app,d.path,d.host,d.node,d.source,d.route"+join,args.ToArray());
-            var global=db.Query("SELECT COALESCE(SUM(upload),0) upload,COALESCE(SUM(download),0) download,COALESCE(SUM(attributed_upload),0) attributedUpload,COALESCE(SUM(attributed_download),0) attributedDownload FROM core_totals WHERE bucket>=? AND bucket<?",q.From,q.To)[0];
-            var events=db.Query("SELECT at,kind,detail FROM events WHERE at>=? AND at<? ORDER BY at DESC,id DESC LIMIT 100",q.From,q.To);
-            var nodes=db.Query("SELECT DISTINCT d.node FROM traffic t JOIN dimensions d ON t.dimension=d.id WHERE t.bucket>=? AND t.bucket<? AND d.source='mihomo' ORDER BY d.node",trendFrom,trendTo).Select(r=>r["node"]).ToArray();
-            return new { summary=summary,rows=rows,applicationRoutes=applicationRoutes,trend=trend,trendStep=step,kinds=kinds,core=global,events=events,nodes=nodes,truncated=truncated,from=q.From,to=q.To,trendFrom=trendFrom,trendTo=trendTo };
+    public object Stats(Query q,Func<bool> cancelled=null) {
+        lock(statisticsGate) {
+            if(cancelled!=null&&cancelled())throw new OperationCanceledException();
+            // A bounded set of immutable query snapshots lives on independent read connections.
+            // Long history queries never take the collector's write lock or retain a WAL read transaction.
+            foreach(var old in snapshots.Where(p=>Clock.Now-p.Value.LastUsed>1800).Select(p=>p.Key).ToArray()){snapshots[old].Dispose();snapshots.Remove(old);}
+            while(snapshots.Count>=3){string oldest=snapshots.OrderBy(p=>p.Value.Access).First().Key;snapshots[oldest].Dispose();snapshots.Remove(oldest);}
+            var snapshot=new StatisticsSnapshot(FilePath,q,cancelled);
+            snapshot.Access=++snapshotAccess;snapshots.Add(snapshot.Id,snapshot);return snapshot.Result;
         }
+    }
+    public object Groups(string snapshot,string view,bool merge,string sort,int offset,int limit,string root,string child,Func<bool> cancelled=null) {
+        lock(statisticsGate){if(cancelled!=null&&cancelled())throw new OperationCanceledException();StatisticsSnapshot value;if(!snapshots.TryGetValue(snapshot,out value)||Clock.Now-value.LastUsed>1800)throw new SnapshotExpiredException();value.Access=++snapshotAccess;return value.Groups(view,merge,sort,offset,limit,root,child,cancelled);}
     }
     public string Csv(Query q) {
         lock(gate){var args=new List<object>();string where=Where(q,args);var text=new System.Text.StringBuilder("\uFEFF时间（北京时间）,来源,应用,程序路径,域名,目标IP,节点,路线,协议,规则,上传字节,下载字节\r\n");
@@ -79,7 +77,7 @@ PRAGMA user_version=1;");
             return text.ToString();}
     }
     internal static string CsvCell(string s) { if(s.Length>0 && "=+-@\t\r".IndexOf(s[0])>=0)s="'"+s;return "\""+s.Replace("\"","\"\"")+"\""; }
-    public void Dispose() { lock(gate){db.Execute("PRAGMA wal_checkpoint(PASSIVE)");db.Dispose();} }
+    public void Dispose() { lock(statisticsGate){foreach(var value in snapshots.Values)value.Dispose();snapshots.Clear();}lock(gate){db.Execute("PRAGMA wal_checkpoint(PASSIVE)");db.Dispose();} }
 }
 internal sealed class TimedDelta : DeltaResult {
     public long Bucket;

@@ -1,4 +1,4 @@
-param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\DataTrafficLedger-v1.5.1-win-x64-portable.zip'))
+param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\DataTrafficLedger-v1.6.0-win-x64-portable.zip'))
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot '..\Uninstall.ps1')
 $testRoot=Join-Path $PSScriptRoot ('run-uninstall-'+[Guid]::NewGuid().ToString('N'))

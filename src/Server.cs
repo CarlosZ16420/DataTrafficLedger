@@ -51,7 +51,7 @@ internal sealed class LocalServer : IDisposable {
                     Dictionary<string,object> etw;try{etw=Json.Read(store.GetMeta("etw_health"))??new Dictionary<string,object>();}catch{etw=new Dictionary<string,object>();}if(Clock.Now-Json.Num(etw,"at")>20)etw["running"]=false;
                     long bytes=0;try{bytes=new FileInfo(store.FilePath).Length;var wal=store.FilePath+"-wal";if(File.Exists(wal))bytes+=new FileInfo(wal).Length;}catch{}
                     var saved=LedgerConfig.Load(data);
-                    using(var process=Process.GetCurrentProcess())RespondJson(stream,new{collector=collector.Status(),etw=etw,startup=Startup.Enabled,startupNeedsRepair=Startup.NeedsRepair(data),fullRequested=saved.EtwRequested,retentionDays=config.RetentionDays,dataDirectory=data,databaseBytes=bytes,memoryBytes=process.WorkingSet64,icons=icons.IsValueCreated?icons.Value.Stats():new IconCacheStats(),preferences=new{theme=saved.Theme,autoRefresh=saved.AutoRefresh},endpoint=new{port=Port,configuredPort=saved.Port,automatic=saved.Port==0,restartRequired=saved.Port!=startingPort,fallback=startingPort!=0&&startingPort!=Port},portable=File.Exists(Path.Combine(Path.GetDirectoryName(Program.Executable),"portable.json")),csrf=Token,version="1.5.1",now=Clock.Now});return;
+                    using(var process=Process.GetCurrentProcess())RespondJson(stream,new{collector=collector.Status(),etw=etw,startup=Startup.Enabled,startupNeedsRepair=Startup.NeedsRepair(data),fullRequested=saved.EtwRequested,retentionDays=config.RetentionDays,dataDirectory=data,databaseBytes=bytes,memoryBytes=process.WorkingSet64,icons=icons.IsValueCreated?icons.Value.Stats():new IconCacheStats(),preferences=new{theme=saved.Theme,autoRefresh=saved.AutoRefresh},endpoint=new{port=Port,configuredPort=saved.Port,automatic=saved.Port==0,restartRequired=saved.Port!=startingPort,fallback=startingPort!=0&&startingPort!=Port},portable=File.Exists(Path.Combine(Path.GetDirectoryName(Program.Executable),"portable.json")),csrf=Token,version="1.6.0",now=Clock.Now});return;
                 }
                 if(path=="/api/icon"&&method=="GET"){
                     string id=Get(query,"id");byte[] identifier;try{identifier=Convert.FromBase64String(id);}catch(FormatException){Respond(stream,400,"无效的应用标识");return;}
@@ -60,7 +60,12 @@ internal sealed class LocalServer : IDisposable {
                     if(png==null)RespondBytes(stream,204,new byte[0],"image/png", "", "private, max-age=60");
                     else RespondBytes(stream,200,png,"image/png", "", "private, max-age=300");return;
                 }
-                if((path=="/api/stats"||path=="/api/export")&&method=="GET"){var q=BuildQuery(query);if(path=="/api/export")Respond(stream,200,store.Csv(q),"text/csv; charset=utf-8","Content-Disposition: attachment; filename=traffic-"+Get(query,"from")+".csv\r\n");else RespondJson(stream,store.Stats(q));return;}
+                if((path=="/api/stats"||path=="/api/export")&&method=="GET"){var q=BuildQuery(query);if(path=="/api/export")Respond(stream,200,store.Csv(q),"text/csv; charset=utf-8","Content-Disposition: attachment; filename=traffic-"+Get(query,"from")+".csv\r\n");else RespondJson(stream,store.Stats(q,()=>cancel.IsCancellationRequested||RequestClosed(client)));return;}
+                if(path=="/api/groups"&&method=="GET"){
+                    int offset,limit;if(!int.TryParse(Get(query,"offset","0"),out offset)||!int.TryParse(Get(query,"limit","30"),out limit))throw new ArgumentException("无效的明细分页参数");
+                    if(Get(query,"snapshot").Length!=32||Get(query,"root").Length>4096||Get(query,"child").Length>4096)throw new ArgumentException("无效的明细分组");
+                    RespondJson(stream,store.Groups(Get(query,"snapshot"),Get(query,"view","app"),Get(query,"merge","true")=="true",Get(query,"sort","total"),offset,limit,Get(query,"root",null),Get(query,"child",null),()=>cancel.IsCancellationRequested||RequestClosed(client)));return;
+                }
                 if(path=="/api/startup"&&method=="POST"){Startup.Set(Get(query,"enabled")=="true",data);RespondJson(stream,new{enabled=Startup.Enabled});return;}
                 if(path=="/api/preferences"&&method=="POST"){
                     string theme=Get(query,"theme");if(!new[]{"system","light","dark"}.Contains(theme))throw new ArgumentException("无效的主题。");
@@ -73,9 +78,10 @@ internal sealed class LocalServer : IDisposable {
                 if(path=="/api/enable-windows"&&method=="POST"){try{Startup.RequestFull(data);RespondJson(stream,new{accepted=true});}catch(System.ComponentModel.Win32Exception ex){RespondJson(stream,new{accepted=false,message=ex.NativeErrorCode==1223?"已取消管理员授权，Clash 流量记录仍在继续。":ex.Message});}return;}
                 if(path=="/api/quit"&&method=="POST"){RespondJson(stream,new{ok=true});quit();return;}
                 Respond(stream,404,"页面不存在");
-            }catch(ArgumentException ex){Respond(stream,400,ex.Message);}catch(Exception){try{Respond(stream,500,"暂时无法读取记录，请稍后刷新。详情可查看数据文件夹中的状态记录。");}catch{}}
+            }catch(OperationCanceledException){}catch(SnapshotExpiredException){Respond(stream,410,"这份统计已过期，请刷新数据后继续查看。");}catch(ArgumentException ex){Respond(stream,400,ex.Message);}catch(Exception){try{Respond(stream,500,"暂时无法读取记录，请稍后刷新。详情可查看数据文件夹中的状态记录。");}catch{}}
         }
     }
+    private static bool RequestClosed(TcpClient client){try{return client.Client.Poll(0,SelectMode.SelectRead)&&client.Client.Available==0;}catch{return true;}}
     internal static Query BuildQuery(Dictionary<string,string> d){
         string from=Get(d,"from"),to=Get(d,"to");
         var q=new Query{From=Clock.TimeBoundary(from,Get(d,"fromTime"),false),To=Clock.TimeBoundary(to,Get(d,"toTime"),true),TrendFrom=Clock.DateBoundary(Get(d,"chartFrom",from),false),TrendTo=Clock.DateBoundary(Get(d,"chartTo",to),true),Scope=Get(d,"scope","all"),Search=Get(d,"search"),Node=Get(d,"node"),App=Get(d,"app"),Japan=Get(d,"japan")=="true"};

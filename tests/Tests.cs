@@ -11,21 +11,23 @@ using System.Drawing;
 using System.Drawing.Imaging;
 
 namespace DataTrafficLedger {
-internal static class Tests {
+internal static partial class Tests {
     private static int passed;
     private static void Assert(bool value,string name){if(!value)throw new Exception("FAIL: "+name);passed++;Console.WriteLine("PASS "+name);}
     private static Snapshot Sample(long upload,long download,params Connection[] connections){return new Snapshot{Upload=upload,Download=download,Connections=connections.ToList()};}
     private static Connection Conn(string id,long start,long upload,long download){return new Connection{Id=id,Started=start,Upload=upload,Download=download,Dimension=new Dimension{App="chrome.exe",Host="example.com",Node="日本测试节点"}};}
     public static int Main(string[] args){
+        if(args.Length==1&&args[0]=="--benchmark")return BenchmarkStatistics();
         if(args.Length==2&&args[0]=="--serve-fixture")return ServeFixture(args[1]);
+        if(args.Length==2&&args[0]=="--serve-paging-fixture")return ServeFixture(args[1],true);
         string root=Path.GetFullPath(Path.Combine(Environment.CurrentDirectory,"tests","run-"+Guid.NewGuid().ToString("N")));Directory.CreateDirectory(root);
         try{
-            TestDeltas();TestHttp();TestNativeEvents();TestStorage(root);TestTimeFilters(Path.Combine(root,"time-filters"));TestIcons(Path.Combine(root,"icons"));TestConfig(Path.Combine(root,"config"));TestServer(Path.Combine(root,"server"));TestPortConflict(Path.Combine(root,"port-conflict"));
+            TestDeltas();TestHttp();TestNativeEvents();TestStorage(root);TestTimeFilters(Path.Combine(root,"time-filters"));TestPaging(Path.Combine(root,"paging"));TestIcons(Path.Combine(root,"icons"));TestConfig(Path.Combine(root,"config"));TestServer(Path.Combine(root,"server"));TestPortConflict(Path.Combine(root,"port-conflict"));
             Console.WriteLine("\n"+passed+" meaningful checks passed.");return 0;
         }catch(Exception ex){Console.WriteLine(ex);return 1;}
         finally{string allowed=Path.GetFullPath(Path.Combine(Environment.CurrentDirectory,"tests"))+Path.DirectorySeparatorChar;if(root.StartsWith(allowed,StringComparison.OrdinalIgnoreCase)&&Directory.Exists(root))Directory.Delete(root,true);}
     }
-    private static int ServeFixture(string directory){
+    private static int ServeFixture(string directory,bool large=false){
         string root=Path.GetFullPath(directory),allowed=Path.GetFullPath(Path.Combine(Environment.CurrentDirectory,"tests"))+Path.DirectorySeparatorChar;
         if(!root.StartsWith(allowed,StringComparison.OrdinalIgnoreCase))throw new ArgumentException("Fixture data must stay inside tests.");
         Directory.CreateDirectory(root);var config=new LedgerConfig();config.Save(root);
@@ -50,6 +52,10 @@ internal static class Tests {
                     totals.Add(new TimedDelta{Bucket=bucket,Upload=coreUp+12000,Download=coreDown+64000,AttributedUpload=coreUp,AttributedDownload=coreDown});
                 }
                 store.Write(facts,totals,"fixture");store.Event("connected","演示数据 · 采集已连接，开始记录本机应用流量。",day+7*3600);store.Event("gap","演示数据 · 12:00 至 13:00 未监控；不补记缺失时段。",day+13*3600);
+            }
+            if(large&&store.GetMeta("large-fixture")==""){
+                long day=Clock.DateBoundary(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd"),false);
+                for(int start=0;start<100000;start+=1000){var batch=new List<Usage>();for(int i=start;i<start+1000;i++){var dim=new Dimension{App="extra-"+(i%65)+".exe",Host="site-"+i+".example",Node="日本 · 大数据测试",Ip="test-"+i};for(int minute=0;minute<5;minute++)batch.Add(new Usage{Bucket=day+minute*60,Dimension=dim,Upload=1,Download=1});}store.Write(batch,null,"large-fixture");}
             }
             collector.Connected=true;collector.Version="演示内核";collector.ConnectionCount=42;
             using(var server=new LocalServer(store,collector,config,root,()=>done.Set())){server.Start();Console.WriteLine("Fixture server ready (synthetic traffic only).");done.Wait();}
@@ -131,11 +137,12 @@ internal static class Tests {
             Assert(Json.Num(Json.Obj(data,"summary"),"download")==50,"Minute range excludes the preceding/following minutes and includes its final minute");
             Assert(Json.Num(Json.Obj(data,"core"),"download")==50,"Core totals use the same selected minute boundaries as application totals");
             Assert(Json.Array(data,"trend").OfType<Dictionary<string,object>>().Sum(r=>Json.Num(r,"download"))==100,"Trend retains unfiltered time context so a third click can choose a new start outside the old selection");
-            Assert(Json.Array(data,"applicationRoutes").OfType<Dictionary<string,object>>().Select(r=>Json.Str(r,"route")).Distinct().Count()==2,"An application's route summary contains both direct and proxy routes in the selected time range");
-            var routeFacts=Json.Array(data,"applicationRoutes").OfType<Dictionary<string,object>>().ToArray();
-            Assert(routeFacts.Any(r=>Json.Str(r,"host")=="example.com"&&Json.Str(r,"node")=="日本 A")&&routeFacts.Any(r=>Json.Str(r,"host")=="direct.example"&&Json.Str(r,"node")=="DIRECT"),"Full route metadata retains original hosts and actual nodes for website and nested branch summaries");
+            var app=PageRows(Page(store,data,"app"))[0];
+            Assert(Json.Array(app,"routes").OfType<Dictionary<string,object>>().Select(r=>Json.Str(r,"route")).Distinct().Count()==2,"An application's route summary contains both direct and proxy routes in the selected time range");
+            var hosts=PageRows(Page(store,data,"app",root:Json.Str(app,"key")));
+            Assert(hosts.Any(r=>Json.Str(r,"title")=="example.com"&&Json.Array(r,"nodes").Contains("日本 A"))&&hosts.Any(r=>Json.Str(r,"title")=="direct.example"&&Json.Array(r,"routes").OfType<Dictionary<string,object>>().Any(p=>Json.Str(p,"route")=="DIRECT")),"Full route metadata retains original hosts and actual nodes for website and nested branch summaries");
             string csv=store.Csv(q);Assert(csv.Contains("15:45:00")&&csv.Contains("15:46:00")&&!csv.Contains("15:44:00")&&!csv.Contains("15:47:00"),"CSV export honors the exact same minute range");
-            q.Scope="proxy";data=Json.Read(Json.Write(store.Stats(q)));Assert(Json.Array(data,"applicationRoutes").OfType<Dictionary<string,object>>().All(r=>Json.Str(r,"route")=="PROXY"),"Application badges follow active source filters instead of reporting historical routes outside the query");
+            q.Scope="proxy";data=Json.Read(Json.Write(store.Stats(q)));Assert(PageRows(Page(store,data,"app")).SelectMany(r=>Json.Array(r,"routes").OfType<Dictionary<string,object>>()).All(r=>Json.Str(r,"route")=="PROXY"),"Application badges follow active source filters instead of reporting historical routes outside the query");
         }
     }
     private static void TestConfig(string root){
@@ -179,6 +186,8 @@ internal static class Tests {
         var config=new LedgerConfig{Port=0};using(var store=new Store(root))using(var collector=new Collector(store,config,root))using(var server=new LocalServer(store,collector,config,root,()=>{})){
             server.Start();string cookie="Cookie: ledger_session="+server.Token+"\r\n";
             Assert(Request(server.Port,"/api/status").StartsWith("HTTP/1.1 401"),"Local traffic API requires a tray-issued session");
+            Assert(Request(server.Port,"/api/groups").StartsWith("HTTP/1.1 401"),"Paged details require the same authenticated local session");
+            Assert(Request(server.Port,"/api/groups?snapshot="+new string('0',32),cookie).StartsWith("HTTP/1.1 410"),"Missing snapshots return a recoverable expiration response");
             Assert(Request(server.Port,"/open/"+server.Token).Contains("HttpOnly; SameSite=Strict"),"Tray entrance issues a strict HttpOnly session cookie");
             Assert(Request(server.Port,"/api/status",cookie).Contains("\"retentionDays\":90"),"Authenticated status reports capture health and actual settings");
             Assert(Request(server.Port,"/api/quit",cookie,"POST").StartsWith("HTTP/1.1 403"),"State-changing calls reject missing anti-forgery tokens");

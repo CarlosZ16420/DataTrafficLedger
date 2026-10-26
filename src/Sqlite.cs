@@ -3,18 +3,28 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Diagnostics;
+using System.Threading;
 
 namespace DataTrafficLedger {
 // Windows 10/11 ships winsqlite3. No bundled database server or native package.
 internal sealed class Sqlite : IDisposable {
     private IntPtr db;
-    public Sqlite(string path) {
-        Check(Native.sqlite3_open_v2(Utf8(path),out db,0x00000002|0x00000004|0x00010000,IntPtr.Zero));
+    private Native.Progress progress;
+    public Sqlite(string path,bool readOnly=false) {
+        Check(Native.sqlite3_open_v2(Utf8(path),out db,(readOnly?0x00000001:0x00000002|0x00000004)|0x00010000,IntPtr.Zero));
         Native.sqlite3_busy_timeout(db,5000);
-        Execute("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; PRAGMA cache_size=-2048; PRAGMA temp_store=MEMORY;");
+        Execute(readOnly?"PRAGMA cache_size=-2048; PRAGMA temp_store=FILE; PRAGMA temp.cache_size=-4096;":"PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA foreign_keys=ON; PRAGMA cache_size=-2048; PRAGMA temp_store=MEMORY;");
     }
     private static byte[] Utf8(string s) { return Encoding.UTF8.GetBytes(s+"\0"); }
-    public void Check(int result) { if(result!=0 && result!=100 && result!=101) throw new InvalidOperationException("SQLite "+result+": "+ReadString(Native.sqlite3_errmsg(db))); }
+    public void Check(int result) { if(result==9)throw new OperationCanceledException("统计查询已取消");if(result!=0 && result!=100 && result!=101) throw new InvalidOperationException("SQLite "+result+": "+ReadString(Native.sqlite3_errmsg(db))); }
+    public void SetProgress(Func<bool> cancelled) {
+        long lastYield=Stopwatch.GetTimestamp();
+        progress=cancelled==null?null:new Native.Progress(_=>{
+            try{if(cancelled())return 1;if(Stopwatch.GetTimestamp()-lastYield>Stopwatch.Frequency/80){Thread.Yield();lastYield=Stopwatch.GetTimestamp();}return 0;}catch{return 1;}
+        });
+        Native.sqlite3_progress_handler(db,progress==null?0:10000,progress,IntPtr.Zero);
+    }
     public void Execute(string sql) {
         IntPtr error;int rc=Native.sqlite3_exec(db,Utf8(sql),IntPtr.Zero,IntPtr.Zero,out error);
         if(error!=IntPtr.Zero) Native.sqlite3_free(error);Check(rc);
@@ -37,6 +47,8 @@ internal sealed class Sqlite : IDisposable {
         public void Dispose() { if(statement!=IntPtr.Zero){Native.sqlite3_finalize(statement);statement=IntPtr.Zero;} }
     }
     private static class Native {
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]internal delegate int Progress(IntPtr context);
+        [DllImport("winsqlite3",CallingConvention=CallingConvention.Cdecl)]internal static extern void sqlite3_progress_handler(IntPtr db,int instructions,Progress callback,IntPtr context);
         [DllImport("winsqlite3",CallingConvention=CallingConvention.Cdecl)]internal static extern int sqlite3_open_v2(byte[] file,out IntPtr db,int flags,IntPtr vfs);
         [DllImport("winsqlite3",CallingConvention=CallingConvention.Cdecl)]internal static extern int sqlite3_close_v2(IntPtr db);
         [DllImport("winsqlite3",CallingConvention=CallingConvention.Cdecl)]internal static extern IntPtr sqlite3_errmsg(IntPtr db);

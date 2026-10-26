@@ -1,4 +1,4 @@
-param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\DataTrafficLedger-v1.5.1-win-x64-portable.zip'))
+param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\DataTrafficLedger-v1.6.0-win-x64-portable.zip'))
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archiveReader=[IO.Compression.ZipFile]::OpenRead([IO.Path]::GetFullPath($Archive))
@@ -36,7 +36,7 @@ function Stop-Portable($state){
 try{
     $state=Start-Portable $appDirectory
     $status=Request-Portable $state '/api/status'
-    if(-not $status.portable -or $status.version -ne '1.5.1' -or $status.dataDirectory -ne (Join-Path $appDirectory 'data')){throw '便携数据位置错误。'}
+    if(-not $status.portable -or $status.version -ne '1.6.0' -or $status.dataDirectory -ne (Join-Path $appDirectory 'data')){throw '便携数据位置错误。'}
     Request-Portable $state '/api/preferences?theme=dark&autoRefresh=true' -Post | Out-Null
     Stop-Portable $state
     $moved=Join-Path $testRoot '搬迁后 新目录'
