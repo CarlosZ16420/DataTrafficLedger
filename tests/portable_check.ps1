@@ -1,4 +1,4 @@
-param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\DataTrafficLedger-v1.6.0-win-x64-portable.zip'))
+param([string]$Archive=(Join-Path $PSScriptRoot '..\releases\DataTrafficLedger-v1.7.0-win-x64-portable.zip'))
 $ErrorActionPreference='Stop'
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $archiveReader=[IO.Compression.ZipFile]::OpenRead([IO.Path]::GetFullPath($Archive))
@@ -36,7 +36,10 @@ function Stop-Portable($state){
 try{
     $state=Start-Portable $appDirectory
     $status=Request-Portable $state '/api/status'
-    if(-not $status.portable -or $status.version -ne '1.6.0' -or $status.dataDirectory -ne (Join-Path $appDirectory 'data')){throw '便携数据位置错误。'}
+    if(-not $status.portable -or $status.version -ne '1.7.0' -or $status.dataDirectory -ne (Join-Path $appDirectory 'data')){throw '便携数据位置错误。'}
+    if(-not $status.preferences.autoMultiplier){throw '新版本倍率估算应默认开启。'}
+    Request-Portable $state '/api/nodes/manual?name=PortableFixtureNode&multiplier=7.5' -Post | Out-Null
+    Request-Portable $state '/api/multipliers?enabled=false' -Post | Out-Null
     Request-Portable $state '/api/preferences?theme=dark&autoRefresh=true' -Post | Out-Null
     Stop-Portable $state
     $moved=Join-Path $testRoot '搬迁后 新目录'
@@ -47,8 +50,10 @@ try{
     $status=Request-Portable $state '/api/status'
     if($status.dataDirectory -ne (Join-Path $moved 'data') -or $status.preferences.theme -ne 'dark' -or -not $status.preferences.autoRefresh){throw '搬迁后没有保留数据和偏好。'}
     if(-not (Test-Path -LiteralPath (Join-Path $moved 'data\traffic.db'))){throw '便携数据库未创建。'}
+    $nodes=Request-Portable $state '/api/nodes?search=PortableFixtureNode'
+    if($status.preferences.autoMultiplier -or $nodes.rows.Count -ne 1 -or $nodes.rows[0].multiplier -ne 7.5 -or -not $nodes.rows[0].manual){throw '搬迁后没有保留独立节点目录、手动倍率和计量偏好。'}
     Stop-Portable $state
-    Write-Output 'PASS: ZIP extraction, Chinese/spaced paths, native startup, adjacent data, clean exit, directory move and preference persistence.'
+    Write-Output 'PASS: ZIP extraction, Chinese/spaced paths, native startup, adjacent data, clean exit, directory move, node catalog, manual rates and preference persistence.'
 }finally{
     if($taskProcess -and -not $taskProcess.HasExited){$taskProcess.Kill();$taskProcess.WaitForExit()}
     # Test-only artifacts remain ignored for inspection; no user data is touched.

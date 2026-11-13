@@ -12,6 +12,7 @@ internal sealed class Store : IDisposable {
     private readonly Dictionary<string,StatisticsSnapshot> snapshots=new Dictionary<string,StatisticsSnapshot>();
     private long snapshotAccess;
     public readonly string FilePath;
+    public readonly NodeCatalog Catalog;
     public Store(string directory) {
         Directory.CreateDirectory(directory);FilePath=Path.Combine(directory,"traffic.db");db=new Sqlite(FilePath);
         db.Execute(@"
@@ -21,14 +22,18 @@ CREATE TABLE IF NOT EXISTS core_totals(bucket INTEGER PRIMARY KEY,upload INTEGER
 CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,at INTEGER NOT NULL,kind TEXT NOT NULL,detail TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS events_at ON events(at);
 CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY,value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS billing(bucket INTEGER NOT NULL,dimension TEXT NOT NULL,extra_upload REAL NOT NULL,extra_download REAL NOT NULL,known_upload INTEGER NOT NULL,known_download INTEGER NOT NULL,PRIMARY KEY(bucket,dimension)) WITHOUT ROWID;
+CREATE TABLE IF NOT EXISTS rate_usage(bucket INTEGER NOT NULL,dimension TEXT NOT NULL,multiplier TEXT NOT NULL,rate_source TEXT NOT NULL,known INTEGER NOT NULL,upload INTEGER NOT NULL,download INTEGER NOT NULL,PRIMARY KEY(bucket,dimension,multiplier,rate_source,known)) WITHOUT ROWID;
 PRAGMA user_version=1;");
+        Catalog=new NodeCatalog(directory);
+        Catalog.SeedHistory(db.Query("SELECT DISTINCT node FROM dimensions WHERE source='mihomo' AND route='PROXY'").Select(r=>Json.Str(r,"node")));
     }
     public string GetMeta(string key) { lock(gate){var rows=db.Query("SELECT value FROM meta WHERE key=?",key);return rows.Count==0?"":Convert.ToString(rows[0]["value"],CultureInfo.InvariantCulture);} }
     private void PutMeta(string key,string value) { db.Run("INSERT INTO meta VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",key,value); }
     public void SetMeta(string key,string value) { lock(gate)PutMeta(key,value); }
     public string ApplicationPath(string id) { lock(gate){var rows=db.Query("SELECT path FROM dimensions WHERE id=? LIMIT 1",id);return rows.Count==0?"":Convert.ToString(rows[0]["path"],CultureInfo.InvariantCulture);} }
     public void Event(string kind,string detail,long at=0) { lock(gate)db.Run("INSERT INTO events(at,kind,detail) VALUES(?,?,?)",at==0?Clock.Now:at,kind,detail); }
-    public void Write(IEnumerable<Usage> usage,IEnumerable<DeltaResult> totals,string heartbeatKey) {
+    public void Write(IEnumerable<Usage> usage,IEnumerable<DeltaResult> totals,string heartbeatKey,string checkpoint=null) {
         lock(gate) {
             db.Execute("BEGIN IMMEDIATE");
             try {
@@ -38,14 +43,25 @@ PRAGMA user_version=1;");
                     var d=u.Dimension;string id=d.Id;
                     db.Run("INSERT OR IGNORE INTO dimensions VALUES(?,?,?,?,?,?,?,?,?,?,?)",id,d.Source,d.App,d.Path,d.Host,d.Ip,d.Node,d.Route,d.Network,d.Rule,d.Chain);
                     db.Run("INSERT INTO traffic VALUES(?,?,?,?) ON CONFLICT(bucket,dimension) DO UPDATE SET upload=upload+excluded.upload,download=download+excluded.download",u.Bucket,id,u.Upload,u.Download);
+                    var rate=u.Rate??Catalog.Resolve(d);
+                    // Always save raw bytes; billing stores an adjustment, so legacy facts remain raw at 1x.
+                    // The collector freezes the rate before buffering, independently of the display setting.
+                    bool proxy=d.Source=="mihomo"&&d.Route=="PROXY";
+                    decimal multiplier=proxy&&rate.Known?rate.Multiplier:1;
+                    NodeRate.Parse(multiplier.ToString(CultureInfo.InvariantCulture));
+                    db.Run("INSERT INTO billing VALUES(?,?,?,?,?,?) ON CONFLICT(bucket,dimension) DO UPDATE SET extra_upload=extra_upload+excluded.extra_upload,extra_download=extra_download+excluded.extra_download,known_upload=known_upload+excluded.known_upload,known_download=known_download+excluded.known_download",u.Bucket,id,(double)(u.Upload*(multiplier-1)),(double)(u.Download*(multiplier-1)),rate.Known?u.Upload:0,rate.Known?u.Download:0);
+                    db.Run("INSERT INTO rate_usage VALUES(?,?,?,?,?,?,?) ON CONFLICT(bucket,dimension,multiplier,rate_source,known) DO UPDATE SET upload=upload+excluded.upload,download=download+excluded.download",u.Bucket,id,NodeRate.Number(multiplier),proxy?rate.Source:"not-proxy",rate.Known,u.Upload,u.Download);
                 }
                 // A flush can span several minutes; each delta carries its own bucket below.
                 if(totals!=null) foreach(var t in totals.OfType<TimedDelta>()) db.Run("INSERT INTO core_totals VALUES(?,?,?,?,?) ON CONFLICT(bucket) DO UPDATE SET upload=upload+excluded.upload,download=download+excluded.download,attributed_upload=attributed_upload+excluded.attributed_upload,attributed_download=attributed_download+excluded.attributed_download",t.Bucket,t.Upload,t.Download,t.AttributedUpload,t.AttributedDownload);
+                // The cursor and its traffic deltas must commit together so restart recovery
+                // can neither skip an uncommitted batch nor count a committed batch twice.
+                if(checkpoint!=null)PutMeta(CaptureCheckpoint.Key,checkpoint);
                 PutMeta(heartbeatKey,Clock.Now.ToString(CultureInfo.InvariantCulture));db.Execute("COMMIT");
             } catch { db.Execute("ROLLBACK");throw; }
         }
     }
-    public void Prune(int days) { lock(gate){long cutoff=Clock.Minute(Clock.Now-days*86400L);db.Execute("BEGIN IMMEDIATE");try{db.Run("DELETE FROM traffic WHERE bucket<?",cutoff);db.Run("DELETE FROM core_totals WHERE bucket<?",cutoff);db.Run("DELETE FROM events WHERE at<?",cutoff);db.Execute("DELETE FROM dimensions WHERE id NOT IN (SELECT DISTINCT dimension FROM traffic); COMMIT; PRAGMA wal_checkpoint(PASSIVE);");}catch{db.Execute("ROLLBACK");throw;}} }
+    public void Prune(int days) { lock(gate){long cutoff=Clock.Minute(Clock.Now-days*86400L);db.Execute("BEGIN IMMEDIATE");try{db.Run("DELETE FROM traffic WHERE bucket<?",cutoff);db.Run("DELETE FROM billing WHERE bucket<?",cutoff);db.Run("DELETE FROM rate_usage WHERE bucket<?",cutoff);db.Run("DELETE FROM core_totals WHERE bucket<?",cutoff);db.Run("DELETE FROM events WHERE at<?",cutoff);db.Execute("DELETE FROM dimensions WHERE id NOT IN (SELECT DISTINCT dimension FROM traffic); COMMIT; PRAGMA wal_checkpoint(PASSIVE);");}catch{db.Execute("ROLLBACK");throw;}} }
     internal static string Where(Query q,List<object> args) {
         var where="t.bucket>=? AND t.bucket<?";args.Add(q.From);args.Add(q.To);
         if(q.Scope=="proxy")where+=" AND d.source='mihomo' AND d.route='PROXY'";
@@ -72,8 +88,9 @@ PRAGMA user_version=1;");
         lock(statisticsGate){if(cancelled!=null&&cancelled())throw new OperationCanceledException();StatisticsSnapshot value;if(!snapshots.TryGetValue(snapshot,out value)||Clock.Now-value.LastUsed>1800)throw new SnapshotExpiredException();value.Access=++snapshotAccess;return value.Groups(view,merge,sort,offset,limit,root,child,cancelled);}
     }
     public string Csv(Query q) {
-        lock(gate){var args=new List<object>();string where=Where(q,args);var text=new System.Text.StringBuilder("\uFEFF时间（北京时间）,来源,应用,程序路径,域名,目标IP,节点,路线,协议,规则,上传字节,下载字节\r\n");
-            using(var s=db.Prepare("SELECT t.bucket,d.source,d.app,d.path,d.host,d.ip,d.node,d.route,d.network,d.rule,t.upload,t.download FROM traffic t JOIN dimensions d ON d.id=t.dimension WHERE "+where+" ORDER BY t.bucket,d.app LIMIT 200001",args.ToArray())) { int count=0;while(s.Step()){if(++count>200000)throw new InvalidOperationException("导出超过 20 万条，请缩小日期范围。");var r=s.Row();var fields=new[]{DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(r["bucket"])).ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss"),Convert.ToString(r["source"]),Convert.ToString(r["app"]),Convert.ToString(r["path"]),Convert.ToString(r["host"]),Convert.ToString(r["ip"]),Convert.ToString(r["node"]),Convert.ToString(r["route"]),Convert.ToString(r["network"]),Convert.ToString(r["rule"]),Convert.ToString(r["upload"]),Convert.ToString(r["download"])};text.AppendLine(string.Join(",",fields.Select(CsvCell)));}}
+        lock(gate){var args=new List<object>();string where=Where(q,args);var text=new System.Text.StringBuilder("\uFEFF时间（北京时间）,来源,应用,程序路径,域名,目标IP,节点,路线,协议,规则,原始上传字节,原始下载字节,展示上传字节,展示下载字节,倍率未知的原始字节,展示口径\r\n");
+            string up=q.ApplyMultipliers?"t.upload+COALESCE(b.extra_upload,0)":"t.upload",down=q.ApplyMultipliers?"t.download+COALESCE(b.extra_download,0)":"t.download";
+            using(var s=db.Prepare("SELECT t.bucket,d.source,d.app,d.path,d.host,d.ip,d.node,d.route,d.network,d.rule,t.upload,t.download,"+up+" selectedUpload,"+down+" selectedDownload,CASE WHEN d.source='mihomo' AND d.route='PROXY' THEN MAX(0,t.upload+t.download-COALESCE(b.known_upload,0)-COALESCE(b.known_download,0)) ELSE 0 END unknownRaw FROM traffic t JOIN dimensions d ON d.id=t.dimension LEFT JOIN billing b ON b.bucket=t.bucket AND b.dimension=t.dimension WHERE "+where+" ORDER BY t.bucket,d.app LIMIT 200001",args.ToArray())) { int count=0;while(s.Step()){if(++count>200000)throw new InvalidOperationException("导出超过 20 万条，请缩小日期范围。");var r=s.Row();var fields=new[]{DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(r["bucket"])).ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd HH:mm:ss"),Convert.ToString(r["source"]),Convert.ToString(r["app"]),Convert.ToString(r["path"]),Convert.ToString(r["host"]),Convert.ToString(r["ip"]),Convert.ToString(r["node"]),Convert.ToString(r["route"]),Convert.ToString(r["network"]),Convert.ToString(r["rule"]),Convert.ToString(r["upload"]),Convert.ToString(r["download"]),Convert.ToString(r["selectedUpload"],CultureInfo.InvariantCulture),Convert.ToString(r["selectedDownload"],CultureInfo.InvariantCulture),Convert.ToString(r["unknownRaw"]),q.ApplyMultipliers?"倍率后估算":"原始流量"};text.AppendLine(string.Join(",",fields.Select(CsvCell)));}}
             return text.ToString();}
     }
     internal static string CsvCell(string s) { if(s.Length>0 && "=+-@\t\r".IndexOf(s[0])>=0)s="'"+s;return "\""+s.Replace("\"","\"\"")+"\""; }

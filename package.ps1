@@ -1,4 +1,4 @@
-param([string]$Version='1.6.0',[switch]$SkipBuild)
+param([string]$Version='1.7.0',[switch]$SkipBuild)
 $ErrorActionPreference='Stop'
 if($Version -notmatch '^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.]+)?$'){throw '版本号格式无效。'}
 if(-not $SkipBuild){& (Join-Path $PSScriptRoot 'build.ps1') -Test}
@@ -41,8 +41,22 @@ automatically after Windows login. If the task is removed, the account changes,
 or the application/data folder moves, enable Windows collection again to authorize
 the new location. TUN mode can temporarily suspend it to prevent double counting.
 
-Collection starts when the application runs. Earlier or missed traffic cannot be
-recovered. Sampling can miss short connections and does not equal a billing meter.
+Collection starts on first launch. A transactional checkpoint resumes cumulative
+traffic after a temporary read failure or ledger restart if the same Mihomo core
+is verified and counters have not rolled back. Recovery is booked to its current
+minute; earlier minute timing and closed connections' attribution are unavailable.
+Sampling can miss short connections and does not equal a billing meter.
+The dashboard compares raw core totals, saved details and unattributed differences.
+Node multipliers are enabled by default for estimated package usage. The Nodes
+page reads all loaded Mihomo proxies, accepts manual rates and versioned JSON
+rate files, and exports a file that users or their AI tools can edit and import.
+Only attributed proxy bytes are weighted. Raw bytes and core totals are retained.
+Unknown or legacy rates use 1x and are explicitly marked. New records freeze their
+rate; changing rates does not reprice history. Disable multiplication in basic
+settings to view raw usage. Estimates do not replace the provider's billing meter.
+GB uses 1024-based units. Other devices and shared-account users are not included.
+Keep the data folder when upgrading. nodes.json stores your separate node catalog;
+retain it when importing an older traffic.db. Exit both instances before copying.
 Path badges and actual proxy node names appear at every level of traffic details.
 
 Update: exit the old version, replace program files from the new ZIP,

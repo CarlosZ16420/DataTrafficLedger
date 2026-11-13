@@ -53,6 +53,7 @@ function renderStatus(){
   $('capture-status').classList.toggle('off',!c.connected||!c.storageHealthy);
   $('capture-status').innerHTML='<i></i>'+esc(!c.storageHealthy?'历史写入异常':c.connected?`记录中 · ${c.connections} 个连接`:'Clash 未连接');
   $('startup-toggle').checked=s.startup;
+  if(!state.multiplierSaving)$('multiplier-toggle').checked=s.preferences?.autoMultiplier!==false;
   $('startup-repair-row').hidden=!s.startupNeedsRepair;
   if(!state.preferencesLoaded){state.theme=s.preferences?.theme||'system';state.auto=Boolean(s.preferences?.autoRefresh);state.preferencesLoaded=true;applyTheme();$('auto-refresh-toggle').checked=state.auto;}
   const endpoint=s.endpoint;
@@ -60,24 +61,28 @@ function renderStatus(){
     $('endpoint-description').textContent=`当前地址：${location.origin}。`+(endpoint.restartRequired?'已保存，请退出托盘后重新启动生效。':endpoint.fallback?'指定端口被占用，已自动使用空闲端口。':'从托盘打开，无需记住端口。');
     if(!state.portLoaded){$('port-mode').value=endpoint.automatic?'auto':'fixed';$('port-number').value=endpoint.configuredPort||18793;updatePortField();state.portLoaded=true;}
   }
-  let windows=e.running?(e.suspended?'已启动，当前暂停（TUN 开启或主采集器离线）':'正在记录未经过 Clash 的应用流量'):s.fullRequested?'未在运行，请重新启用或查看记录状态':'尚未启用；需要一次 Windows 管理员授权';
-  if(Number(e.error))windows+=` · 错误码 ${e.error}`;
-  if(e.lostEvents||e.lostBuffers||e.unsupportedEvents||e.droppedFlows)windows+=' · 存在丢失事件，此时段不完整';
+  let windows=e.running?(e.suspended?'已启动，当前暂停（TUN 开启、模式未知或主采集器未连接）':'正在记录未经过 Clash 的应用流量'):s.fullRequested?'未在运行，请重新启用或查看记录状态':'尚未启用；需要一次 Windows 管理员授权';
+  if(e.error)windows+=` · ${Number(e.error)?'错误码 ':''}${e.error}`;
+  if(e.lostEvents||e.lostBuffers||e.unsupportedEvents||e.droppedFlows||e.droppedRecords)windows+=' · 存在丢失事件或明细，此时段不完整';
   $('windows-status').textContent=windows;$('enable-windows').textContent=e.running?'重新启用':'启用补充采集';
   $('storage-status').textContent=`账本 ${bytes(s.databaseBytes)} · 后台内存 ${bytes(s.memoryBytes)} · 明细保留 ${s.retentionDays} 天`;
   $('data-directory').textContent='数据位置：'+s.dataDirectory;
   $('windows-note').textContent=e.running&&!e.suspended?'正在记录 · IP 级统计':e.suspended?'当前暂停，避免 TUN 重复计量':'补充采集未运行';
   $('footer-status').textContent=`v${s.version} · ${c.version?'Mihomo '+c.version:'等待 Clash'} · 页面关闭后继续记录`;
-  const notices=[];if(!c.storageHealthy)notices.push('历史写入失败。请检查磁盘空间；当前统计可能不完整。');if(!c.connected)notices.push('暂未连接 Clash Verge，历史记录仍可查看。'+c.error);if(c.tun)notices.push('检测到 TUN 已开启，Windows 补充计量会暂停，以免重复记账。');
+  const notices=[];if(!c.storageHealthy)notices.push('历史写入失败。请检查磁盘空间；当前统计可能不完整。');if(Number(c.droppedRecords)>0)notices.push(`本次运行因写入失败丢弃了 ${Number(c.droppedRecords)} 条明细；对应字节将在写入恢复后计入内核差额。`);if(!c.connected)notices.push('暂未连接 Clash Verge，历史记录仍可查看。'+c.error);if(c.tun)notices.push('检测到 TUN 已开启，Windows 补充计量会暂停，以免重复记账。');
   $('message').hidden=!notices.length;$('message').textContent=notices.join(' ');
 }
 function renderData(){
   const d=state.data,s=d.summary,total=Number(s.upload)+Number(s.download);
+  const estimated=d.metric==='estimated',raw=Number(s.rawUpload??s.upload)+Number(s.rawDownload??s.download),unknown=Number(s.unknownRaw)||0;
+  $('metric-name').textContent=estimated?'倍率后估算用量':'已归属原始流量';
+  $('billing-note').textContent=(estimated?`当前展示倍率后估算 · 原始已归属流量 ${bytes(raw)}。`:'当前展示原始流量 · 可在基础设置开启倍率估算。')+(unknown?` 其中 ${bytes(unknown)} 代理流量缺少已确认的历史倍率，暂按 1 倍。`:'')+' 内核核对区始终使用原始字节。';
   $('total-value').innerHTML=bytes(total,true);$('total-upload').textContent='↑ '+bytes(s.upload);$('total-download').textContent='↓ '+bytes(s.download);
   let proxy=0,direct=0,windows=0;d.kinds.forEach(k=>{const n=Number(k.upload)+Number(k.download);if(k.source==='windows')windows+=n;else if(k.route==='PROXY')proxy+=n;else if(k.route==='DIRECT')direct+=n;});
   $('proxy-value').innerHTML=bytes(proxy,true);$('direct-value').innerHTML=bytes(direct,true);$('windows-value').innerHTML=windows===0&&!state.status.etw.running?'—':bytes(windows,true);$('proxy-note').textContent=state.japan?'按日本节点名称筛选':'按连接的实际节点统计';
-  const core=Number(d.core.upload)+Number(d.core.download),attributed=Number(d.core.attributedUpload)+Number(d.core.attributedDownload);const missing=Math.max(0,core-attributed);
-  $('accuracy-text').textContent=`所选时间内，全 Clash 内核累计 ${bytes(core)} · 未归属差额参考 ${bytes(missing)}。各来源按各自口径计量。`;
+  const core=Number(d.core.upload)+Number(d.core.download),recorded=Number(d.core.recordedUpload??d.core.attributedUpload)+Number(d.core.recordedDownload??d.core.attributedDownload),missing=Math.max(0,core-recorded);
+  $('core-total').innerHTML=bytes(core,true);$('core-recorded').innerHTML=bytes(recorded,true);$('core-missing').innerHTML=bytes(missing,true);$('core-directions').textContent=`上传 ${bytes(d.core.upload)} · 下载 ${bytes(d.core.download)}`;
+  $('accuracy-text').textContent=recorded>core?'所选时段的已保存明细大于内核参考，可能涉及计数重置或采样边界；不能据此判断采集完整。':'上方摘要与分组明细展示已归属部分；未归属差额保留在内核总量中，不分摊给节点。';
   const selected=$('node-filter').value,nodeNames=selected&&!d.nodes.includes(selected)?[selected,...d.nodes]:d.nodes;$('node-filter').innerHTML='<option value="">全部节点</option>'+nodeNames.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join('');$('node-filter').value=selected;
   $('range-summary').textContent=fullStamp(state.range.start)+' — '+fullStamp(state.range.end-60)+' · 北京时间（含结束分钟）';
   $('inventory-summary').textContent=`${Number(s.applications)||0} 个应用 · ${Number(s.hosts)||0} 个域名 / IP`;
@@ -135,6 +140,7 @@ function rowHtml(g,key,title,subtitle,level,icon,expandable,tag='',applicationId
   const total=Number(state.data.summary.upload)+Number(state.data.summary.download),share=total?(g.upload+g.download)/total*100:0,open=state.expanded.has(key);
   const nodes=g.nodes||[];
   const nodeLabels=nodes.length?`<div class="row-nodes" aria-label="实际代理节点">${nodes.map(node=>`<span class="node-tag" title="${esc(node)}"><span aria-hidden="true">↗</span> ${esc(node)}</span>`).join('')}</div>`:'';
+  subtitle+=(state.data.metric==='estimated'?` · 原始 ${bytes(Number(g.rawUpload??g.upload)+Number(g.rawDownload??g.download))}`:'')+(Number(g.unknownRaw)>0?` · 倍率未知 ${bytes(g.unknownRaw)}`:'');
   return `<div class="traffic-row ${level===1?'child':level===2?'grandchild':''} ${expandable?'expandable':''} ${open?'expanded':''}" ${expandable?`data-expand="${esc(key)}" role="button" tabindex="0" aria-expanded="${open}"`:''}><div class="row-identity">${expandable?`<span class="chevron" aria-hidden="true">${open?'⌄':'›'}</span>`:''}${level===2?'':`<span class="app-icon ${icon}"><span class="app-icon-fallback" aria-hidden="true">${esc(icon==='node'?'↗':icon==='domain'?'◈':title.slice(0,1).toUpperCase())}</span>${applicationId?`<img data-icon-id="${esc(applicationId)}" alt="" width="48" height="48" decoding="async">`:''}</span>`}<div class="identity-text"><div class="row-title" title="${esc(title)}"><span class="row-name">${esc(title)}</span>${tag?`<span class="row-tags" aria-label="当前筛选内的流量路径">${tag}</span>`:''}</div><div class="row-subtitle" title="${esc(subtitle)}">${esc(subtitle)}</div>${nodeLabels}</div></div><span class="number total">${bytes(g.upload+g.download)}</span><span class="number">${bytes(g.upload)}</span><span class="number">${bytes(g.download)}</span><span class="share-cell">${share.toFixed(1)}%<svg class="share-bar" viewBox="0 0 100 4" aria-hidden="true"><rect class="share-background" width="100" height="4" rx="2"/><rect class="share-fill" width="${Math.min(100,share).toFixed(2)}" height="4" rx="2"/></svg></span></div>`;
 }
 const iconQueue=[];let activeIconLoads=0;

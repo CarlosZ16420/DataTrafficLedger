@@ -103,27 +103,33 @@ internal sealed class EtwCapture : IDisposable {
     [DllImport("advapi32.dll")]private static extern uint CloseTrace(ulong handle);
 }
 internal static class EtwHelper {
+    internal static bool SaveHealth(Store store,object health){try{store.SetMeta("etw_health",Json.Write(health));return true;}catch{return false;}}
+    internal static bool Log(Store store,string kind,string detail){try{store.Event(kind,detail);return true;}catch{return false;}}
+    internal static bool MainAlive(Dictionary<string,object> state,long now){long at=Json.Num(state,"at");return at>0&&now>=at&&now-at<20;}
+    internal static bool CanCount(Dictionary<string,object> state,long now){return MainAlive(state,now)&&Json.Bool(state,"connected")&&Json.Bool(state,"tunKnown")&&!Json.Bool(state,"tun");}
+    private static Dictionary<string,object> ReadState(string data){try{return Json.Read(File.ReadAllText(Path.Combine(data,"capture-state.json")));}catch{return null;}}
     public static int Run(string data){
         bool created;using(var mutex=new Mutex(true,Program.MutexName(data)+".Etw",out created)){if(!created)return 0;
             try{using(var stop=new EventWaitHandle(false,EventResetMode.ManualReset,Program.MutexName(data)+".EtwStop"))using(var store=new Store(data))using(var capture=new EtwCapture("LocalTrafficLedger.Network."+Program.UserKey)){
                 string stopFile=Path.Combine(data,"etw-stop.request");try{if(File.Exists(stopFile))File.Delete(stopFile);}catch{}
-                stop.Reset();uint code=capture.Start();store.SetMeta("etw_health",Json.Write(new{at=Clock.Now,running=code==0,error=code}));
-                if(code!=0){store.Event("windows-gap","Windows 补充采集未启动，错误码 "+code+"。需要管理员权限或可用的 ETW 会话。");return (int)code;}
-                store.Event("windows-start","Windows 补充采集已启动；排除回环连接和 Mihomo 进程，不解析网页内容。");
-                var pending=new List<Usage>();long lastLoss=0;bool suspended=false;long absentSince=0;
+                stop.Reset();uint code=capture.Start();SaveHealth(store,new{at=Clock.Now,running=code==0,error=code});
+                if(code!=0){Log(store,"windows-gap","Windows 补充采集未启动，错误码 "+code+"。需要管理员权限或可用的 ETW 会话。");return (int)code;}
+                Log(store,"windows-start","Windows 补充采集已启动；排除回环连接和 Mihomo 进程，不解析网页内容。");
+                var pending=new List<Usage>();long lastLoss=0,droppedRecords=0,reportedDrops=0;bool suspended=false;long absentSince=0;
                 while(!stop.WaitOne(5000)){
                     if(File.Exists(stopFile))break;
-                    bool tun=false,live=false;try{var state=Json.Read(File.ReadAllText(Path.Combine(data,"capture-state.json")));live=Clock.Now-Json.Num(state,"at")<20;tun=Json.Bool(state,"tun");}catch{}
-                    var batch=capture.Drain();if(live){absentSince=0;if(!tun)pending.AddRange(batch);}else{if(absentSince==0)absentSince=Clock.Now;if(Clock.Now-absentSince>60)break;}
-                    bool suspend=tun||!live;if(suspend!=suspended){store.Event("windows-gap",suspend?"Windows 补充计量暂停：TUN 开启或主采集器离线，避免重复记账。":"Windows 补充计量恢复。");suspended=suspend;}
-                    try{store.Write(pending,null,"windows_heartbeat");pending.Clear();}catch(Exception ex){store.SetMeta("etw_health",Json.Write(new{at=Clock.Now,running=true,error="历史写入失败："+ex.Message}));if(pending.Count>50000){pending.Clear();store.Event("windows-gap","Windows 记录缓存已满，部分流量未保存。");}continue;}
-                    var health=Json.Read(Json.Write(capture.Health()));health["suspended"]=suspend;store.SetMeta("etw_health",Json.Write(health));long losses=Json.Num(health,"lostEvents")+Json.Num(health,"lostBuffers")+Json.Num(health,"unsupportedEvents")+Json.Num(health,"droppedFlows");
-                    if(losses>lastLoss){store.Event("windows-gap","Windows 网络事件存在丢失或无法解析，累计 "+losses+"；此时段记录不完整。");lastLoss=losses;}
+                    var state=ReadState(data);bool live=MainAlive(state,Clock.Now),allowed=CanCount(state,Clock.Now);
+                    var batch=capture.Drain();if(live){absentSince=0;if(allowed)pending.AddRange(batch);}else{if(absentSince==0)absentSince=Clock.Now;if(Clock.Now-absentSince>60)break;}
+                    bool suspend=!allowed;if(suspend!=suspended){Log(store,"windows-gap",suspend?"Windows 补充计量暂停：TUN 开启、模式未知或主采集器未连接，避免重复记账。":"Windows 补充计量恢复。");suspended=suspend;}
+                    try{store.Write(pending,null,"windows_heartbeat");pending.Clear();}catch(Exception ex){int count=Math.Max(0,pending.Count-50000);pending.RemoveRange(0,count);droppedRecords+=count;SaveHealth(store,new{at=Clock.Now,running=true,suspended=suspend,storageHealthy=false,droppedRecords=droppedRecords,error="历史写入失败："+ex.Message});continue;}
+                    if(droppedRecords>reportedDrops&&Log(store,"windows-gap","Windows 写入失败期间缓存已满，累计 "+droppedRecords+" 条补充明细未保存。"))reportedDrops=droppedRecords;
+                    var health=Json.Read(Json.Write(capture.Health()));health["suspended"]=suspend;health["storageHealthy"]=true;health["droppedRecords"]=droppedRecords;SaveHealth(store,health);long losses=Json.Num(health,"lostEvents")+Json.Num(health,"lostBuffers")+Json.Num(health,"unsupportedEvents")+Json.Num(health,"droppedFlows");
+                    if(losses>lastLoss&&Log(store,"windows-gap","Windows 网络事件存在丢失或无法解析，累计 "+losses+"；此时段记录不完整。"))lastLoss=losses;
                     if(!capture.Running)break;
                 }
                 // Stop tracing before draining the final events; UI and network traffic are never blocked by the recorder.
-                capture.Dispose();if(!suspended)pending.AddRange(capture.Drain());try{store.Write(pending,null,"windows_heartbeat");}catch{}
-                store.SetMeta("etw_health",Json.Write(new{at=Clock.Now,running=false,error=0}));store.Event("windows-stop","Windows 补充采集已停止。");
+                capture.Dispose();if(CanCount(ReadState(data),Clock.Now))pending.AddRange(capture.Drain());try{store.Write(pending,null,"windows_heartbeat");}catch{}
+                SaveHealth(store,new{at=Clock.Now,running=false,error=0,droppedRecords=droppedRecords});Log(store,"windows-stop","Windows 补充采集已停止。");
             }}finally{mutex.ReleaseMutex();}return 0;
         }
     }

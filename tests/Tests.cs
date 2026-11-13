@@ -22,7 +22,7 @@ internal static partial class Tests {
         if(args.Length==2&&args[0]=="--serve-paging-fixture")return ServeFixture(args[1],true);
         string root=Path.GetFullPath(Path.Combine(Environment.CurrentDirectory,"tests","run-"+Guid.NewGuid().ToString("N")));Directory.CreateDirectory(root);
         try{
-            TestDeltas();TestHttp();TestNativeEvents();TestStorage(root);TestTimeFilters(Path.Combine(root,"time-filters"));TestPaging(Path.Combine(root,"paging"));TestIcons(Path.Combine(root,"icons"));TestConfig(Path.Combine(root,"config"));TestServer(Path.Combine(root,"server"));TestPortConflict(Path.Combine(root,"port-conflict"));
+            TestDeltas();TestNodes(Path.Combine(root,"nodes"));TestBilling(Path.Combine(root,"billing"));TestNodeServer(Path.Combine(root,"node-server"));TestCaptureRecovery();TestCaptureBuffer(Path.Combine(root,"capture-buffer"));TestCheckpoints(Path.Combine(root,"checkpoints"));TestCollectorReconnect(Path.Combine(root,"collector"));TestCollectorRestart(Path.Combine(root,"restart"));TestCollectorCancellation(Path.Combine(root,"cancel"));TestCoreReconciliation(Path.Combine(root,"reconciliation"));TestHttp();TestNativeEvents();TestStorage(root);TestTimeFilters(Path.Combine(root,"time-filters"));TestPaging(Path.Combine(root,"paging"));TestIcons(Path.Combine(root,"icons"));TestConfig(Path.Combine(root,"config"));TestServer(Path.Combine(root,"server"));TestPortConflict(Path.Combine(root,"port-conflict"));
             Console.WriteLine("\n"+passed+" meaningful checks passed.");return 0;
         }catch(Exception ex){Console.WriteLine(ex);return 1;}
         finally{string allowed=Path.GetFullPath(Path.Combine(Environment.CurrentDirectory,"tests"))+Path.DirectorySeparatorChar;if(root.StartsWith(allowed,StringComparison.OrdinalIgnoreCase)&&Directory.Exists(root))Directory.Delete(root,true);}
@@ -57,6 +57,9 @@ internal static partial class Tests {
                 long day=Clock.DateBoundary(DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(8)).ToString("yyyy-MM-dd"),false);
                 for(int start=0;start<100000;start+=1000){var batch=new List<Usage>();for(int i=start;i<start+1000;i++){var dim=new Dimension{App="extra-"+(i%65)+".exe",Host="site-"+i+".example",Node="日本 · 大数据测试",Ip="test-"+i};for(int minute=0;minute<5;minute++)batch.Add(new Usage{Bucket=day+minute*60,Dimension=dim,Upload=1,Download=1});}store.Write(batch,null,"large-fixture");}
             }
+            var fixtureNodes=Enumerable.Range(0,65).Select(i=>new CatalogNode{Id=NodeCatalog.Id("演示订阅","演示节点 "+i.ToString("D2")),Name="演示节点 "+i.ToString("D2"),Provider="演示订阅",Type="Vless",Detected=1,DetectedSource="metadata"}).ToList();
+            foreach(string name in new[]{"🇯🇵 日本 · Tokyo 01","🇯🇵 日本 · Tokyo 02","🇸🇬 新加坡 · Singapore 02"})fixtureNodes.Add(new CatalogNode{Id=NodeCatalog.Id("",name),Name=name,Type="Trojan",Detected=1,DetectedSource="metadata"});
+            store.Catalog.ReplaceInventory(fixtureNodes);
             collector.Connected=true;collector.Version="演示内核";collector.ConnectionCount=42;
             using(var server=new LocalServer(store,collector,config,root,()=>done.Set())){server.Start();Console.WriteLine("Fixture server ready (synthetic traffic only).");done.Wait();}
         }return 0;

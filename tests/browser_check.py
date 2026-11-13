@@ -149,6 +149,75 @@ try:
     assert cdp.evaluate("Boolean(state.data && state.status)"), 'Page failed to load data'
     settled()
     assert cdp.evaluate("document.title") == '流量账本'
+    # Exercise the complete inventory using synthetic, never-connected nodes.
+    def node_wait(expression):
+        for _ in range(100):
+            if cdp.evaluate(expression):
+                return
+            time.sleep(.05)
+        raise TimeoutError('Node UI did not settle: ' + expression)
+
+    cdp.evaluate("location.hash='#nodes'")
+    node_wait("catalogState.data?.total>=68&&document.querySelectorAll('.catalog-row').length===30")
+    assert cdp.evaluate("document.body.dataset.page==='nodes'&&getComputedStyle(document.querySelector('.metrics')).display==='none'"), 'Node inventory is an independent page'
+    first_node_ids = cdp.evaluate("catalogState.data.rows.map(n=>n.id)")
+    cdp.evaluate("document.getElementById('node-next').click()")
+    node_wait("catalogState.data.offset===30&&document.querySelectorAll('.catalog-row').length===30")
+    assert not set(first_node_ids) & set(cdp.evaluate("catalogState.data.rows.map(n=>n.id)")), 'Inventory pages cannot repeat nodes'
+    cdp.evaluate("document.getElementById('node-next').click()")
+    node_wait("catalogState.data.offset===60&&document.querySelectorAll('.catalog-row').length===catalogState.data.total-60")
+    assert cdp.evaluate("document.getElementById('node-next').disabled"), 'Final inventory page must stop at all nodes'
+    cdp.evaluate("window.testNodeId=catalogState.data.rows[0].id;window.testNodeName=catalogState.data.rows[0].name;document.querySelector('.catalog-row input').value='0.5';document.querySelector('[data-node-save]').click()")
+    node_wait("catalogState.data.rows.find(n=>n.id===testNodeId)?.manual===true")
+    assert cdp.evaluate("catalogState.data.rows.find(n=>n.id===testNodeId).multiplier===0.5"), 'Manual decimal multiplier is persisted'
+    cdp.evaluate("document.querySelector('[data-node-reset]').click()")
+    node_wait("catalogState.data.rows.find(n=>n.id===testNodeId)?.manual===false")
+    assert cdp.evaluate("catalogState.data.rows.find(n=>n.id===testNodeId).multiplier===1"), 'Restore automatic recovers metadata rate'
+    cdp.evaluate("document.getElementById('import-nodes').click();document.getElementById('node-import-text').value=JSON.stringify({version:1,source:'Synthetic browser import',nodes:[{name:'AI 导入节点 <img src=x>',multiplier:3}]});document.getElementById('node-import-text').dispatchEvent(new Event('input'));document.getElementById('node-preview-button').click()")
+    node_wait("catalogState.preview!==null")
+    assert cdp.evaluate("document.getElementById('node-apply-button').disabled&&document.getElementById('node-import-preview').textContent.includes('未找到')"), 'Unmatched names are previewed without being silently created'
+    assert cdp.evaluate("document.querySelectorAll('#node-import-preview img').length===0"), 'Imported node names are rendered as text'
+    cdp.evaluate("document.getElementById('node-create-missing').click()")
+    assert cdp.evaluate("catalogState.preview===null&&document.getElementById('node-apply-button').disabled"), 'Editing import options invalidates the old preview'
+    cdp.evaluate("document.getElementById('node-preview-button').click()")
+    node_wait("catalogState.preview!==null&&!document.getElementById('node-apply-button').disabled")
+    cdp.evaluate("document.getElementById('node-apply-button').click()")
+    node_wait("!document.getElementById('node-import-dialog').open&&catalogState.data.all>=69")
+    cdp.evaluate("document.getElementById('catalog-search').value='AI 导入';document.getElementById('catalog-search').dispatchEvent(new Event('input'))")
+    node_wait("catalogState.data.total===1&&document.querySelectorAll('.catalog-row').length===1")
+    assert cdp.evaluate("catalogState.data.rows[0].multiplier===3&&document.querySelectorAll('#node-list img').length===0"), 'AI rate files are imported and escaped in the complete inventory'
+    cdp.evaluate("document.getElementById('add-node').click();document.getElementById('node-add-name').value='手动添加免费节点';document.getElementById('node-add-rate').value='0';document.getElementById('node-add-form').requestSubmit()")
+    node_wait("!document.getElementById('node-add-dialog').open")
+    cdp.evaluate("document.getElementById('catalog-search').value='手动添加';document.getElementById('catalog-search').dispatchEvent(new Event('input'))")
+    node_wait("catalogState.data.total===1&&catalogState.data.rows[0].name==='手动添加免费节点'")
+    assert cdp.evaluate("catalogState.data.rows[0].multiplier===0&&catalogState.data.rows[0].manual"), 'A manually added zero-rate node is not mistaken for unknown'
+    exported = cdp.evaluate("(async()=>await (await fetch('/api/nodes/export')).json())()")
+    assert exported['version'] == 1 and any(n['name']=='手动添加免费节点' and n['multiplier']==0 for n in exported['nodes']), 'Node export round-trips exact names and zero multipliers'
+    cdp.evaluate("document.getElementById('catalog-search').value='';document.getElementById('catalog-search').dispatchEvent(new Event('input'))")
+    node_wait("catalogState.data.total>=70&&document.querySelectorAll('.catalog-row').length===30")
+    cdp.evaluate("document.getElementById('toast').hidden=true;window.scrollTo({top:0,behavior:'instant'})")
+    (ROOT / 'tests' / 'nodes-desktop.png').write_bytes(base64.b64decode(cdp.call('Page.captureScreenshot', {'captureBeyondViewport':False})['data']))
+    cdp.evaluate("savePreferences('dark',false)")
+    node_wait("document.documentElement.dataset.theme==='dark'")
+    (ROOT / 'tests' / 'nodes-dark.png').write_bytes(base64.b64decode(cdp.call('Page.captureScreenshot', {'captureBeyondViewport':False})['data']))
+    cdp.call('Emulation.setDeviceMetricsOverride', {'width':390,'height':1000,'deviceScaleFactor':1,'mobile':True})
+    assert cdp.evaluate("document.documentElement.scrollWidth<=innerWidth&&getComputedStyle(document.querySelector('.main-nav')).display!=='none'"), 'Mobile users can reach the node page without horizontal overflow'
+    (ROOT / 'tests' / 'nodes-mobile.png').write_bytes(base64.b64decode(cdp.call('Page.captureScreenshot', {'captureBeyondViewport':False})['data']))
+    cdp.call('Emulation.setDeviceMetricsOverride', {'width':1440,'height':1080,'deviceScaleFactor':1,'mobile':False})
+    cdp.evaluate("savePreferences('light',false)")
+    node_wait("document.documentElement.dataset.theme==='light'")
+    cdp.evaluate("location.hash='#overview';settingsVisible(true);document.getElementById('multiplier-toggle').click()")
+    node_wait("state.data.metric==='raw'&&!state.multiplierSaving")
+    assert cdp.evaluate("document.getElementById('metric-name').textContent==='已归属原始流量'&&!document.getElementById('multiplier-toggle').checked"), 'Switching off multiplication updates all displayed measurement data'
+    cdp.evaluate("document.getElementById('multiplier-toggle').click()")
+    node_wait("state.data.metric==='estimated'&&!state.multiplierSaving")
+    assert cdp.evaluate("document.getElementById('billing-note').textContent.includes('原始已归属流量')"), 'Weighted view keeps the original measurement visible'
+    cdp.evaluate("settingsVisible(false);window.scrollTo({top:0,behavior:'instant'})")
+    settled()
+    print('Node checks passed: all-node pagination, manual rates, restore, AI import preview/apply, escaped names, zero rates, exports, measurement switch, desktop/mobile/dark layout.')
+    assert cdp.evaluate("document.getElementById('core-total').textContent===bytes(Number(state.data.core.upload)+Number(state.data.core.download),true).replace(/<[^>]*>/g,'')"), 'Core total must show raw upload plus download separately from attributed summary'
+    assert cdp.evaluate("document.getElementById('core-recorded').textContent===bytes(Number(state.data.core.recordedUpload)+Number(state.data.core.recordedDownload),true).replace(/<[^>]*>/g,'')"), 'Reconciliation must show actual saved Mihomo facts'
+    assert cdp.evaluate("document.getElementById('core-scope-note').textContent.includes('不受节点')&&document.getElementById('core-scope-note').textContent.includes('未乘机场倍率')"), 'Reconciliation must make filter and billing scope explicit'
     assert cdp.evaluate("document.querySelectorAll('.traffic-row').length") > 0, 'No live records shown'
     if '--paging' in sys.argv:
         assert cdp.evaluate('state.data.summary.groups>100000'), 'Large fixture must exceed the old limit'
@@ -283,6 +352,7 @@ try:
 
     def chart_click(minute_of_day):
         cdp.evaluate("document.getElementById('trend-chart').scrollIntoView({block:'center',behavior:'instant'})")
+        cdp.evaluate("new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)))")
         coordinates = cdp.evaluate(f"(()=>{{const g=state.chartGeometry,s=document.querySelector('#trend-chart svg');const x=g.left+g.plotW*{minute_of_day}/1440;const p=new DOMPoint(x,g.top+g.plotH*.75).matrixTransform(s.getScreenCTM());return {{x:p.x,y:p.y}}}})()")
         cdp.call('Input.dispatchMouseEvent', {'type': 'mouseMoved', **coordinates})
         cdp.call('Input.dispatchMouseEvent', {'type': 'mousePressed', 'button': 'left', 'clickCount': 1, **coordinates})

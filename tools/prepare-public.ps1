@@ -11,7 +11,7 @@ $allowed=@('.gitattributes','.gitignore','.github','README.md','CHANGELOG.md','L
 $files=@(& git -C $root ls-tree -r --name-only $commit -- @allowed)
 if($LASTEXITCODE -ne 0){throw '无法读取源提交文件清单。'}
 foreach($file in $files){
-    if($file -match '(^|/)(data|app|dist|releases|public-snapshot|sources|output|chrome-[^/]*|live[^/]*|run-[^/]*)/' -or $file -match '\.(db|sqlite|sqlite3|log|csv|zip|exe)$' -or $file -match '(^|/)(runtime|settings|capture-state)\.json$'){
+    if($file -match '(^|/)(data|app|dist|releases|public-snapshot|sources|output|chrome-[^/]*|live[^/]*|run-[^/]*)/' -or $file -match '\.(db|sqlite|sqlite3|log|csv|zip|exe)$' -or $file -match '(^|/)(runtime|settings|capture-state|nodes)\.json$'){
         throw "不允许发布运行资料：$file"
     }
 }

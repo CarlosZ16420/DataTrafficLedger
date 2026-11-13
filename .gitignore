@@ -19,6 +19,8 @@ __pycache__/
 runtime.json
 capture-state.json
 error.log
+nodes.json
+/tests/live-*.log
 *.sqlite
 *.sqlite3
 *.csv

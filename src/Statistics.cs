@@ -25,26 +25,32 @@ internal sealed class StatisticsSnapshot : IDisposable {
         var watch=Stopwatch.StartNew();db=new Sqlite(path,true);
         db.SetProgress(cancelled??(()=>false));
         try {
-            var args=new List<object>();string where=Store.Where(q,args),join=" FROM traffic t JOIN dimensions d ON d.id=t.dimension WHERE "+where;
+            var args=new List<object>();string where=Store.Where(q,args);
+            string billingJoin=" LEFT JOIN billing b ON b.bucket=t.bucket AND b.dimension=t.dimension";
+            string upload=q.ApplyMultipliers?"t.upload+COALESCE(b.extra_upload,0)":"t.upload",download=q.ApplyMultipliers?"t.download+COALESCE(b.extra_download,0)":"t.download";
             string filters=where.Substring("t.bucket>=? AND t.bucket<?".Length);
             long trendFrom=q.TrendTo>q.TrendFrom?q.TrendFrom:q.From,trendTo=q.TrendTo>q.TrendFrom?q.TrendTo:q.To;
             long step=trendTo-trendFrom>3*86400?3600:trendTo-trendFrom>86400?900:300;
             db.Execute("BEGIN");
             // Aggregate narrow minute facts first, then look up each dimension once rather than once per minute.
-            db.Run("CREATE TEMP TABLE detail AS SELECT d.id,d.source,d.app,d.path,d.host,d.node,d.route,d.network,t.upload,t.download,t.first,t.last FROM (SELECT dimension,SUM(upload) upload,SUM(download) download,MIN(bucket) first,MAX(bucket) last FROM traffic WHERE bucket>=? AND bucket<? GROUP BY dimension) t JOIN dimensions d ON d.id=t.dimension WHERE 1=1"+filters,args.ToArray());
-            var summary=db.Query("SELECT COALESCE(SUM(upload),0) upload,COALESCE(SUM(download),0) download,COUNT(DISTINCT app) applications,COUNT(DISTINCT host) hosts,COUNT(*) groups,MIN(first) first,MAX(last) last FROM detail")[0];
+            db.Run("CREATE TEMP TABLE detail AS SELECT d.id,d.source,d.app,d.path,d.host,d.node,d.route,d.network,t.upload,t.download,t.raw_upload,t.raw_download,CASE WHEN d.source='mihomo' AND d.route='PROXY' THEN MAX(0,t.raw_upload+t.raw_download-t.known) ELSE 0 END unknown_bytes,t.first,t.last FROM (SELECT t.dimension,SUM("+upload+") upload,SUM("+download+") download,SUM(t.upload) raw_upload,SUM(t.download) raw_download,SUM(COALESCE(b.known_upload,0)+COALESCE(b.known_download,0)) known,MIN(t.bucket) first,MAX(t.bucket) last FROM traffic t"+billingJoin+" WHERE t.bucket>=? AND t.bucket<? GROUP BY t.dimension) t JOIN dimensions d ON d.id=t.dimension WHERE 1=1"+filters,args.ToArray());
+            var summary=db.Query("SELECT COALESCE(SUM(upload),0) upload,COALESCE(SUM(download),0) download,COALESCE(SUM(raw_upload),0) rawUpload,COALESCE(SUM(raw_download),0) rawDownload,COALESCE(SUM(unknown_bytes),0) unknownRaw,COUNT(DISTINCT app) applications,COUNT(DISTINCT host) hosts,COUNT(*) groups,MIN(first) first,MAX(last) last FROM detail")[0];
             var contextArgs=new List<object>(args);contextArgs[0]=trendFrom;contextArgs[1]=trendTo;
             var trendArgs=new List<object>{step,step};trendArgs.AddRange(contextArgs);
-            var trend=db.Query("SELECT (t.bucket / ?) * ? bucket,SUM(t.upload) upload,SUM(t.download) download"+(filters==""?" FROM traffic t WHERE "+where:join)+" GROUP BY 1 ORDER BY 1",trendArgs.ToArray());
+            var trend=db.Query("SELECT (t.bucket / ?) * ? bucket,SUM("+upload+") upload,SUM("+download+") download FROM traffic t"+(q.ApplyMultipliers?billingJoin:"")+(filters==""?"":" JOIN dimensions d ON d.id=t.dimension")+" WHERE "+where+" GROUP BY 1 ORDER BY 1",trendArgs.ToArray());
             var kinds=db.Query("SELECT source,route,SUM(upload) upload,SUM(download) download FROM detail GROUP BY source,route");
             var core=db.Query("SELECT COALESCE(SUM(upload),0) upload,COALESCE(SUM(download),0) download,COALESCE(SUM(attributed_upload),0) attributedUpload,COALESCE(SUM(attributed_download),0) attributedDownload FROM core_totals WHERE bucket>=? AND bucket<?",q.From,q.To)[0];
+            // Reconcile against facts actually saved, including databases written by older
+            // collectors whose attributed counters could include discarded buffer rows.
+            var recorded=filters==""?db.Query("SELECT COALESCE(SUM(raw_upload),0) upload,COALESCE(SUM(raw_download),0) download FROM detail WHERE source='mihomo'")[0]:db.Query("SELECT COALESCE(SUM(t.upload),0) upload,COALESCE(SUM(t.download),0) download FROM (SELECT dimension,SUM(upload) upload,SUM(download) download FROM traffic WHERE bucket>=? AND bucket<? GROUP BY dimension) t JOIN dimensions d ON d.id=t.dimension WHERE d.source='mihomo'",q.From,q.To)[0];
+            core["recordedUpload"]=recorded["upload"];core["recordedDownload"]=recorded["download"];
             var events=db.Query("SELECT at,kind,detail FROM events WHERE at>=? AND at<? ORDER BY at DESC,id DESC LIMIT 100",q.From,q.To);
             var nodes=filters==""&&trendFrom==q.From&&trendTo==q.To?db.Query("SELECT DISTINCT node FROM detail WHERE source='mihomo' ORDER BY node").Select(r=>r["node"]).ToArray():db.Query("SELECT DISTINCT node FROM dimensions WHERE source='mihomo' AND id IN (SELECT DISTINCT dimension FROM traffic WHERE bucket>=? AND bucket<?) ORDER BY node",trendFrom,trendTo).Select(r=>r["node"]).ToArray();
             db.Execute("COMMIT");
             // No main-database transaction remains open while the user browses this snapshot.
             db.Execute("ALTER TABLE detail ADD COLUMN service TEXT; UPDATE detail SET service="+ServiceSql()+"; CREATE INDEX temp.detail_app ON detail(app,path); CREATE INDEX temp.detail_node ON detail(node); CREATE INDEX temp.detail_host ON detail(host); CREATE INDEX temp.detail_service ON detail(service);");
             var topSites=db.Query("SELECT service key,SUM(upload) upload,SUM(download) download FROM detail GROUP BY service ORDER BY SUM(upload+download) DESC,service LIMIT 3");
-            Result=new{snapshot=Id,summary=summary,topSites=topSites,trend=trend,trendStep=step,kinds=kinds,core=core,events=events,nodes=nodes,from=q.From,to=q.To,trendFrom=trendFrom,trendTo=trendTo,elapsedMs=watch.ElapsedMilliseconds};db.SetProgress(null);
+            Result=new{snapshot=Id,metric=q.ApplyMultipliers?"estimated":"raw",summary=summary,topSites=topSites,trend=trend,trendStep=step,kinds=kinds,core=core,events=events,nodes=nodes,from=q.From,to=q.To,trendFrom=trendFrom,trendTo=trendTo,elapsedMs=watch.ElapsedMilliseconds};db.SetProgress(null);
         } catch { db.Dispose();throw; }
     }
     private static string AppKey(Dictionary<string,object> row){return Json.Write(new[]{Json.Str(row,"app"),Json.Str(row,"path")});}
@@ -78,7 +84,7 @@ internal sealed class StatisticsSnapshot : IDisposable {
         if(!pages.TryGetValue(cacheKey,out cache)) {
             string table="page_"+(++pageSequence).ToString(CultureInfo.InvariantCulture);
             try{
-                db.Run("CREATE TEMP TABLE "+table+" AS SELECT "+columns+",MIN(id) id,MIN(network) network,SUM(upload) upload,SUM(download) download,COUNT(DISTINCT host) hosts,COUNT(DISTINCT node) exits,COUNT(DISTINCT app) apps FROM detail"+where+" GROUP BY "+columns,args.ToArray());
+                db.Run("CREATE TEMP TABLE "+table+" AS SELECT "+columns+",MIN(id) id,MIN(network) network,SUM(upload) upload,SUM(download) download,SUM(raw_upload) rawUpload,SUM(raw_download) rawDownload,SUM(unknown_bytes) unknownRaw,COUNT(DISTINCT host) hosts,COUNT(DISTINCT node) exits,COUNT(DISTINCT app) apps FROM detail"+where+" GROUP BY "+columns,args.ToArray());
                 cache=new PageCache{Table=table,Total=Convert.ToInt32(db.Query("SELECT COUNT(*) n FROM "+table)[0]["n"])};
             }catch{db.SetProgress(null);db.Execute("DROP TABLE IF EXISTS "+table);throw;}
             // Share aggregates between sort orders and bound cached rows as well as branch count.

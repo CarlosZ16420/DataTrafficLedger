@@ -8,7 +8,7 @@
 为 Windows 电脑留一本本地流量账本。<br>
 按应用、网站与实际代理节点查看用量，关掉页面也继续记录。
 
-![Version](https://img.shields.io/badge/version-1.6.0-547fec?style=flat-square)
+![Version](https://img.shields.io/badge/version-1.7.0-547fec?style=flat-square)
 ![Windows x64](https://img.shields.io/badge/Windows-10%2F11_x64-172a47?style=flat-square)
 ![Portable](https://img.shields.io/badge/portable-解压即用-169e8d?style=flat-square)
 ![MIT](https://img.shields.io/badge/license-MIT-169e8d?style=flat-square)
@@ -16,7 +16,7 @@
 
 **[下载 Windows 便携版](https://github.com/CarlosZ16420/DataTrafficLedger/releases/latest)** · [反馈问题](https://github.com/CarlosZ16420/DataTrafficLedger/issues) · [更新日志](CHANGELOG.md)
 
-[快速开始](#快速开始) · [功能介绍](#功能介绍) · [常见问题](#常见问题) · [开发与开源](#开发与开源) · [友链](#友链)
+[快速开始](#快速开始) · [功能介绍](#功能介绍) · [节点倍率](#节点倍率) · [常见问题](#常见问题) · [开发与开源](#开发与开源) · [友链](#友链)
 
 </div>
 
@@ -33,7 +33,7 @@
 
 ## 快速开始
 
-1. 在 [Releases](https://github.com/CarlosZ16420/DataTrafficLedger/releases/latest) 下载 `DataTrafficLedger-v1.6.0-win-x64-portable.zip`，**完整解压到可写文件夹**。
+1. 在 [Releases](https://github.com/CarlosZ16420/DataTrafficLedger/releases/latest) 下载 `DataTrafficLedger-v1.7.0-win-x64-portable.zip`，**完整解压到可写文件夹**。
 2. 双击 `DataTrafficLedger.exe`。程序进入系统托盘，并用默认浏览器打开仪表盘。
 3. 正常使用网络，稍后刷新即可查看新记录。关闭网页不会停止采集，点击托盘图标可再次打开。
 
@@ -93,6 +93,21 @@
 支持浅色、深色和跟随系统。界面适配窄窗口，显示筛选摘要并可一键清除。
 主题和页面自动刷新偏好保存在本机设置中，更换端口后仍会保留。
 
+### 节点倍率
+
+“节点与倍率”页面自动读取 Mihomo 当前加载的全部节点，包含从未使用过的节点，支持搜索、筛选和翻页。
+节点倍率用于估算套餐扣量。例如，走 2 倍节点产生的 1 GB 流量，按约 2 GB 计入估算。应用可从明确的倍率元数据或节点名称中识别倍率，也支持手动填写。
+
+**建议用 AI 批量填写未识别的倍率。**
+
+1. 打开“节点与倍率”，点击“导出倍率”获取 JSON 文件。
+2. 把导出的节点列表和服务商公布的倍率表交给 AI，去掉账号信息、订阅链接和访问凭据。请 AI 保留 `id`、`name` 和 `provider`，只填写能核实的 `multiplier`，未知项保留 `null`。
+3. 回到“节点与倍率”，点击“导入倍率”并检查预览，核对节点匹配和倍率后再确认。已手动指定的倍率优先保留。
+
+“设置 → 基础设置 → 自动计算节点倍率”默认开启。摘要、趋势、明细和 CSV 显示倍率后估算用量，原始字节始终保留；关闭开关即可查看原始用量。
+新记录使用采样时保存的倍率，之后修改不改变旧账；旧版历史缺少倍率快照时暂按 1 倍。节点与倍率保存在独立 `nodes.json` 中，导入旧版数据库时保留该文件。
+文件格式、AI 填写方式和兼容范围见 [节点倍率说明](docs/NODE-RATES.md)。
+
 <details>
 <summary>查看深色界面</summary>
 
@@ -124,8 +139,9 @@
 <details>
 <summary>能恢复安装前的流量，或与运营商账单逐字节对齐吗？</summary>
 
-不能。统计从运行后开始。Mihomo 活动连接采用采样方式，短连接、末段和未监控时段可能无法归属。
-内核总量与明细的差额单独显示，不分摊给节点。Windows ETW 和 Mihomo 的字节口径不同。
+不能恢复首次运行之前的流量，也不保证与账单逐字节对齐。短暂断连或账本重启后，若仍是同一 Mihomo 内核且计数未回退，会从已保存检查点继续累计，并标明记入恢复分钟。
+短连接与末段可能无法归属；页面单独展示内核原始总量、实际保存明细及差额，不分摊给节点。倍率后用量仅为已归属代理流量的估算，GB 按 1024 换算；共享账号的其他设备也不包含在本机账本中。
+Windows ETW 和 Mihomo 的字节口径不同，TUN 开启时暂停补充计量。
 趋势图显示时段用量，不是瞬时网速。默认保留 90 天明细，详见 [计量说明](docs/MEASUREMENT.md)。
 
 </details>
@@ -181,7 +197,7 @@ TUN 开启或主采集器状态不明时暂停这部分计量，以免重复计�
 ## 开发与开源
 
 **本项目由 AI（OpenAI Codex）根据维护者需求完成开发，包括代码实现、界面迭代、测试和文档。**
-维护者 CarlosZ16420 提出需求、参与体验反馈并负责发布；项目采用 [MIT License](LICENSE)。
+项目采用 [MIT License](LICENSE)。
 
 ```powershell
 .\build.ps1 -Test

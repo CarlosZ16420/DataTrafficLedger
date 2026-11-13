@@ -34,6 +34,14 @@ internal static class Program {
             if(args.Contains("--install-startup")){Startup.Set(true,data);return 0;}
             if(args.Contains("--remove-startup")){Startup.Set(false,data);return 0;}
             if(args.Contains("--stop")){LocalServer.SendQuit(data);EtwHelper.Stop(data);return 0;}
+            if(args.Contains("--refresh-nodes")||args.Contains("--import-node-rates")||args.Contains("--export-node-rates")){
+                bool nodeOwner;using(var mutex=new Mutex(true,MutexName(data),out nodeOwner)){if(!nodeOwner)throw new InvalidOperationException("账本正在运行，请使用节点页面导入；命令行操作前需退出该数据目录的实例。");try{
+                    var catalog=new NodeCatalog(data);
+                    if(args.Contains("--refresh-nodes"))catalog.Refresh(LedgerConfig.Load(data).Pipe);
+                    int import=Array.IndexOf(args,"--import-node-rates");if(import>=0){if(import+1>=args.Length)throw new ArgumentException("缺少倍率文件路径。");string text=File.ReadAllText(args[import+1]);var preview=Json.Read(Json.Write(catalog.Import(text,false,args.Contains("--create-missing-nodes"),0)));catalog.Import(text,true,args.Contains("--create-missing-nodes"),Json.Num(preview,"revision"));}
+                    int export=Array.IndexOf(args,"--export-node-rates");if(export>=0){if(export+1>=args.Length)throw new ArgumentException("缺少导出路径。");AtomicFile.Write(Path.GetFullPath(args[export+1]),catalog.Export());}
+                }finally{mutex.ReleaseMutex();}}return 0;
+            }
             bool created;using(var singleton=new Mutex(true,MutexName(data),out created)){
                 if(!created){if(!args.Contains("--background")&&!args.Contains("--headless"))LocalServer.OpenExisting(data);return 0;}
                 try{
@@ -131,7 +139,6 @@ internal sealed class TrayContext : ApplicationContext {
     public void Open(){server.Open();}
     protected override void ExitThreadCore(){EtwHelper.Stop(data);base.ExitThreadCore();}
     protected override void Dispose(bool disposing){if(disposing&&!disposed){disposed=true;SystemEvents.SessionEnding-=SessionEnding;if(timer!=null)timer.Dispose();if(tray!=null){tray.Visible=false;tray.Dispose();}if(icon!=null)icon.Dispose();server.Dispose();dispatcher.Dispose();}base.Dispose(disposing);}
-    private static Icon MakeIcon(){using(var bitmap=new Bitmap(32,32))using(var g=Graphics.FromImage(bitmap)){g.SmoothingMode=System.Drawing.Drawing2D.SmoothingMode.AntiAlias;g.Clear(Color.FromArgb(19,31,49));using(var pen=new Pen(Color.FromArgb(62,207,174),3)){g.DrawLines(pen,new[]{new Point(5,22),new Point(11,15),new Point(17,19),new Point(26,8)});}IntPtr handle=bitmap.GetHicon();try{return (Icon)Icon.FromHandle(handle).Clone();}finally{DestroyIcon(handle);}}}
-    [System.Runtime.InteropServices.DllImport("user32.dll")]private static extern bool DestroyIcon(IntPtr handle);
+    private static Icon MakeIcon(){using(var resource=Assembly.GetExecutingAssembly().GetManifestResourceStream("app.icon"))return new Icon(resource,SystemInformation.SmallIconSize);}
 }
 }

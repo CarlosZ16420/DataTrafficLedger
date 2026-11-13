@@ -3,6 +3,8 @@
 运行：Windows 10/11 x64、.NET Framework 4.8。编译还需 .NET SDK 中的 Roslyn。
 不需要 NuGet、Node、Docker、外部 SQLite 或网页打包器。C# 托盘和 HTTP 服务将 `web/` 作为资源嵌入 EXE。
 
+`assets/app.ico` 包含 16–256 像素的九种尺寸，作为 EXE 和系统托盘的共用图标嵌入程序；快捷方式直接使用 EXE 图标。修改 `assets/readme/logo.svg` 后，先运行 `tools/build-icon.ps1` 重新生成 ICO，再构建。
+
 ```powershell
 .\build.ps1 -Test
 .\package.ps1 -SkipBuild
@@ -10,10 +12,13 @@
 
 测试包含增量、重置、短连接缺口、HTTP Unicode 分块、SQLite 事务／保留策略、IPv4／IPv6／UDP、
 回环排除、图标缓存、会话／Host／防伪校验、配置迁移、主题持久化和端口冲突回退。
+采集回归还使用随机命名管道及虚构快照，验证读取失败／账本重启后恢复同一内核、检查点与流量原子提交、日志写入失败不中断采集、超过 50,000 条缓存先提交、失败事务重试、退出取消与核对范围；显式指定测试管道，不自动发现真实代理内核。
+这些原生测试需要 Windows 命名管道权限；限制管道访问的沙箱会拒绝连接，应在允许该权限的 Windows 测试环境运行。
+1.7.0 的原生测试另覆盖节点目录、合成策略组去重、文件匹配／冲突／原子性、小数与零倍率、缓冲前倍率快照、同分钟倍率变化、旧账缺失倍率以及原始／估算统计一致性。浏览器验收包含 65 个从未产生流量的虚构节点、目录翻页、手动编辑与恢复、AI 文件预览／导入、零倍率、导出和基础设置开关，并保存 `tests/nodes-*.png` 供视觉检查。
 `package.ps1` 默认先构建并测试，`-SkipBuild` 只供已验证的构建使用；生成 ZIP、SHA-256 和严格七文件清单（包含卸载入口）。
 `releases/`、`dist/`、`app/`、`data/` 和测试运行数据不进入源码仓库。
 
-英文产品名为 **Data Traffic Ledger**，程序为 `DataTrafficLedger.exe`；公有仓库为 `CarlosZ16420/DataTrafficLedger`，私有开发仓库为 `CarlosZ16420/data-traffic-ledger`。
+英文产品名为 **Data Traffic Ledger**，程序为 `DataTrafficLedger.exe`；公有仓库为 `CarlosZ16420/DataTrafficLedger`。
 为兼容旧版账本和 Windows 集成，非便携数据目录、互斥量、ETW 会话、自启动与采集任务及旧注册表项继续使用 `LocalTrafficLedger` 标识。
 更换 EXE 文件名后需在设置中修复自启动路径，并重新授权已启用的 Windows 补充采集；卸载程序同时识别当前目录中的新旧 EXE。
 
@@ -68,6 +73,7 @@ SQLite 执行期间周期性检查请求取消并让出线程，不固定等待�
 4. 在公有仓库发布版本与便携包，附同名 `.sha256`。
 
 公开快照采用允许文件列表；用户数据库、运行凭据、日志、个人浏览器资料、旧版本和本地路径记录不会同步。
+个人节点目录、倍率文件及一次性网站读取结果留在被忽略的 `data/` 或 `releases/`；不写入源码、测试夹具或公开发行包。节点文件格式与离线命令见 [NODE-RATES.md](NODE-RATES.md)。
 发行 ZIP 和包内文件名均为英文 ASCII，离线说明使用英文 README.txt；打包与便携测试同时校验这一要求。
 GitHub workflow 支持手动验证和标签发布。维护时更新 `src/Server.cs` 的版本、README、CHANGELOG 与包版本。
 

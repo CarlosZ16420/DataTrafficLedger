@@ -4,19 +4,21 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="color-scheme" content="light dark"><title>流量账本</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23131f31'/%3E%3Cpath d='M6 23l6-9 6 5 8-12' fill='none' stroke='%233ecfae' stroke-width='3'/%3E%3C/svg%3E">
-  <link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script>
+  <link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script><script src="/nodes.js" defer></script>
 </head>
 <body>
 <div class="shell">
   <header class="header">
     <a class="brand" href="/" aria-label="流量账本首页"><span class="brand-icon"><svg viewBox="0 0 32 32" aria-hidden="true"><path d="m6 23 6-9 6 5 8-12"/></svg></span><span>流量账本<small>DATA TRAFFIC LEDGER</small></span></a>
-    <nav class="main-nav" aria-label="页面导航"><a href="#overview" class="active">总览</a><a href="#details">流量明细</a><a href="#history">记录状态</a></nav>
+    <nav class="main-nav" aria-label="页面导航"><a href="#overview" class="active">总览</a><a href="#details">流量明细</a><a href="#nodes">节点与倍率</a><a href="#history">记录状态</a></nav>
     <div class="header-right"><span id="capture-status" class="capture-status"><i></i>正在连接</span><button class="button icon-button" id="theme-button" aria-label="切换到深色主题" title="切换主题">◐</button><button class="button" id="settings-button" aria-expanded="false" aria-controls="settings-panel">设置 <span aria-hidden="true">⚙</span></button></div>
   </header>
   <main id="overview">
     <section class="page-title"><div><div class="eyebrow">YOUR NETWORK, AT A GLANCE</div><h1>流量总览<span class="local-badge">仅此电脑</span></h1><p>流量去了哪里，打开账本就知道。</p></div><div class="refresh-area"><span id="last-refresh">尚未刷新</span><button class="button primary" id="refresh-button"><span aria-hidden="true">↻</span> 刷新数据</button></div></section>
     <section class="settings-panel" id="settings-panel" hidden aria-label="应用设置">
       <div class="panel-heading"><div><h2>应用设置</h2><p>关闭页面后继续记录，退出托盘程序才会停止。</p></div><button class="text-button" id="close-settings" aria-label="关闭设置">关闭 ×</button></div>
+      <h3 class="settings-section-title">基础设置</h3>
+      <label class="setting-row"><span><strong>自动计算节点倍率</strong><small>默认开启。代理用量按记录当时的倍率估算；关闭后显示原始流量。倍率未知时暂按 1 倍，原始字节始终保留。</small></span><input type="checkbox" id="multiplier-toggle" role="switch" checked></label>
       <label class="setting-row"><span><strong>开机自启动</strong><small id="startup-description">登录 Windows 后在托盘运行，不自动打开页面。</small></span><input type="checkbox" id="startup-toggle" role="switch"></label>
       <div class="setting-row" id="startup-repair-row" hidden><span><strong>自启动路径需要更新</strong><small>程序位置已改变，点击修复，将自启动关联到当前目录。</small></span><button class="button" id="repair-startup">修复自启动</button></div>
       <div class="setting-row"><span><strong>Windows 补充采集</strong><small id="windows-status">检查状态中…</small><small>首次授权一次，后续启动无需重复授权。开启开机自启动后，登录 Windows 自动恢复；搬迁目录或任务被删除后需重新授权。</small></span><button class="button" id="enable-windows">启用补充采集</button></div>
@@ -43,10 +45,17 @@
     <div id="message" class="message" role="status" hidden></div>
     <div id="loading-status" class="loading-status" role="status" aria-live="polite" hidden><span id="loading-label">正在汇总全部记录…</span><span class="loading-track" role="progressbar" aria-label="正在加载流量统计"><span></span></span></div>
     <section class="metrics" aria-label="流量摘要">
-      <article class="metric main-metric"><div class="metric-label">已归属流量 <span>当前筛选</span></div><div class="metric-value" id="total-value">—</div><div class="metric-bottom"><span id="total-upload">↑ —</span><span id="total-download">↓ —</span></div></article>
+      <article class="metric main-metric"><div class="metric-label"><span id="metric-name">倍率后估算用量</span><span>当前筛选</span></div><div class="metric-value" id="total-value">—</div><div class="metric-bottom"><span id="total-upload">↑ —</span><span id="total-download">↓ —</span></div></article>
       <article class="metric"><div class="metric-label"><span class="dot blue"></span>通过代理 <span class="metric-symbol" aria-hidden="true">↗</span></div><div class="metric-value" id="proxy-value">—</div><div class="metric-note" id="proxy-note">按连接的实际节点统计</div></article>
       <article class="metric"><div class="metric-label"><span class="dot teal"></span>Clash 直连 <span class="metric-symbol" aria-hidden="true">⇄</span></div><div class="metric-value" id="direct-value">—</div><div class="metric-note">经过 Clash，规则选择 DIRECT</div></article>
       <article class="metric"><div class="metric-label"><span class="dot amber"></span>Clash 外流量 <span class="metric-symbol" aria-hidden="true">⊞</span></div><div class="metric-value" id="windows-value">—</div><div class="metric-note" id="windows-note">Windows 补充采集</div></article>
+    </section>
+    <div class="billing-note" id="billing-note" role="status"></div>
+    <section class="core-summary" aria-label="Clash 流量核对">
+      <div><span>Clash 内核原始流量</span><strong id="core-total">—</strong><small id="core-directions">上传 — · 下载 —</small></div>
+      <div><span>已保存 Clash 明细</span><strong id="core-recorded">—</strong><small>可按应用、网站和节点追溯</small></div>
+      <div><span>未归属差额参考</span><strong id="core-missing">—</strong><small>包含未捕获到归属的短连接和末段</small></div>
+      <p id="core-scope-note">仅随所选时间范围变化，包含代理与 Clash 直连；不受节点、来源或搜索筛选影响。原始字节未乘机场倍率，GB 按 1024 换算。</p>
     </section>
     <div class="context-strip"><span id="range-summary">正在读取记录…</span><span id="inventory-summary"></span></div>
     <div class="analytics-grid">
@@ -54,7 +63,7 @@
       <section class="panel composition-panel"><div class="panel-heading"><div><h2>来源分布</h2><p>当前筛选下的已归属用量</p></div><span class="panel-kicker">BREAKDOWN</span></div><div class="composition-body"><div id="source-chart" class="source-chart"></div><div id="source-legend" class="source-legend"></div></div><div class="top-sites"><div class="subheading"><h3>热门网站</h3><span id="sites-caption">按用量排序</span></div><div id="top-sites"></div></div></section>
     </div>
     <div class="accuracy-strip"><span class="accuracy-label">采样记录</span><span id="accuracy-text">正在读取记录…</span><button class="text-button" id="accuracy-toggle" aria-expanded="false" aria-controls="accuracy-detail">计量说明 ⓘ</button></div>
-    <div class="accuracy-detail" id="accuracy-detail" hidden><p>Clash 接口提供活动连接的累计字节数。短连接和连接结束前的末段可能无法归属；内核总量与明细的差额单独显示，不分摊到任何节点。</p><p>Clash 外流量采用 Windows 网络事件的字节口径，与 Clash 的连接字节口径有所不同。已排除回环及代理核心；TUN 开启时暂停补充计量，避免重复。无法识别的网站保留为 IP。</p><p>日本筛选根据节点名称中的“日本”、日本旗帜、Japan 或 [JP] 归类。网站分组同样只是域名归类，展开后可查看原始域名。首次启动之前及停止采集期间的历史无法恢复。</p></div>
+    <div class="accuracy-detail" id="accuracy-detail" hidden><p>Clash 接口提供活动连接的累计字节数。短连接和连接结束前的末段可能无法归属；内核总量与实际保存明细的差额单独显示，不分摊到任何节点。明细暂时大于内核参考时，也不能据此判断采集完整。</p><p>短暂断连或账本重启后，确认仍为同一内核且计数未回退时会恢复累计增量，记在恢复分钟。首次运行、内核更换或重置前未保存的流量无法可靠补回。</p><p>开启“自动计算节点倍率”后，摘要、趋势、分组与 CSV 使用同一估算口径；只对实际代理节点的已归属字节应用倍率，直连、Clash 外和内核差额保持原始值。新记录保存当时的倍率；修改倍率不会追溯改变旧记录。倍率未知或旧版记录缺少倍率快照时暂按 1 倍，并显示未知字节量。估算不能代替机场账单，当前按同一倍率计算上下行，不支持按时段变化或代理链多节点分别计费。</p><p>Clash 外流量采用 Windows 网络事件的字节口径，与 Clash 的连接字节口径有所不同。已排除回环及代理核心；TUN 开启时暂停补充计量，避免重复。无法识别的网站保留为 IP。</p><p>日本筛选根据节点名称中的“日本”、日本旗帜、Japan 或 [JP] 归类。网站分组同样只是域名归类，展开后可查看原始域名。</p></div>
     <section class="panel details-panel" id="details"><div class="panel-heading details-heading"><div><h2>流量去向 <span id="record-count" class="count-badge">0</span></h2><p>展开应用，追溯网站、原始域名与实际节点。</p></div><button class="button" id="export-button">导出 CSV <span aria-hidden="true">↗</span></button></div>
       <div class="table-toolbar"><div class="view-tabs" id="views"><button class="active" data-view="app" aria-pressed="true">按应用</button><button data-view="node" aria-pressed="false">按节点</button><button data-view="host" aria-pressed="false">按网站</button></div><div class="table-options"><label class="group-toggle"><input type="checkbox" id="service-toggle" checked>合并常见网站</label><select id="sort-order" aria-label="明细排序"><option value="total">总流量 ↓</option><option value="total-asc">总流量 ↑</option><option value="upload">上传量 ↓</option><option value="upload-asc">上传量 ↑</option><option value="download">下载量 ↓</option><option value="download-asc">下载量 ↑</option><option value="share">占比 ↓</option><option value="share-asc">占比 ↑</option><option value="name">名称 A–Z</option></select></div></div>
       <div class="table-head"><span id="dimension-heading">应用 / 网站 / 节点</span>
@@ -64,9 +73,27 @@
         <span><button class="column-sort" data-sort-field="share" data-sort-label="占比" aria-pressed="false">占比 <span class="sort-arrow" aria-hidden="true">↕</span></button></span>
       </div><div id="traffic-table" aria-busy="false"></div><div class="table-bottom"><span id="table-description"></span><div class="page-buttons"><button class="text-button" id="previous-page" hidden>上一页</button><button class="text-button" id="show-more" hidden>下一页</button></div></div></section>
     <section class="panel history-panel" id="history"><div class="panel-heading"><div><h2>记录状态</h2><p>采集启动、中断与恢复都会留下时间记录。</p></div><span class="history-note">北京时间 · UTC+8</span></div><div id="history-list" class="history-list"></div></section>
+    <section id="nodes-page" hidden aria-label="节点与倍率">
+      <div class="page-title"><div><div class="eyebrow">NODES & MULTIPLIERS</div><h1>节点与倍率<span class="local-badge">本地目录</span></h1><p>读取全部已加载节点，为未来的代理流量记录倍率。</p></div><button class="button primary" id="read-nodes">↻ 读取节点</button></div>
+      <div class="node-summary" id="node-summary" role="status">正在读取节点目录…</div>
+      <section class="panel node-panel"><div class="panel-heading"><div><h2>全部节点</h2><p>手动指定优先，其次为倍率文件、节点元数据与名称标记。读取失败时保留上次目录。</p></div><div class="node-actions"><button class="button" id="add-node">添加节点</button><button class="button" id="import-nodes">导入倍率</button><button class="button" id="export-nodes">导出倍率</button></div></div>
+        <div class="node-toolbar"><input type="search" id="catalog-search" aria-label="搜索节点目录" placeholder="搜索节点或来源"><select id="catalog-filter" aria-label="节点目录筛选"><option value="all">全部节点</option><option value="present">当前已加载</option><option value="unknown">倍率未知</option><option value="manual">手动指定</option></select></div>
+        <div id="node-list" aria-busy="false"></div>
+        <div class="table-bottom"><span id="node-page-description"></span><div class="page-buttons"><button class="text-button" id="node-previous">上一页</button><button class="text-button" id="node-next">下一页</button></div></div>
+      </section>
+      <p class="node-help">只读取 Mihomo 当前加载的节点及代理集合，包含从未产生流量的节点，不包含策略组与直连项。未加载的订阅可通过文件或手动补充。名称相同且来源不明的节点不自动猜测倍率。修改只影响之后采集的记录。</p>
+    </section>
     <footer><span><i class="footer-lock" aria-hidden="true">◈</i> 数据留在本机 · 无遥测 · 无外部资源</span><span id="footer-status">后台采集与页面刷新独立运行</span></footer>
   </main>
 </div>
 <div class="toast" id="toast" role="status" hidden></div>
+<dialog id="node-import-dialog" class="node-dialog" aria-labelledby="node-import-title"><form method="dialog"><div class="panel-heading"><div><h2 id="node-import-title">导入节点倍率</h2><p>先预览匹配结果，再写入本机。手动指定的倍率会保留。</p></div><button class="text-button" value="cancel" aria-label="关闭导入">关闭 ×</button></div></form>
+  <label class="file-label">选择倍率文件（UTF-8 JSON，最多 1 MB）<input type="file" id="node-file" accept=".json,application/json"></label>
+  <label class="import-text-label">或粘贴 AI 整理的倍率数据<textarea id="node-import-text" rows="6" spellcheck="false" placeholder='{"version":1,"source":"我的倍率表","nodes":[{"name":"节点名称","multiplier":3}]}'></textarea></label>
+  <label class="group-toggle"><input type="checkbox" id="node-create-missing">同时添加未读取的节点</label>
+  <div id="node-import-preview" class="import-preview" role="status">选择文件或粘贴内容后，点击预览。</div>
+  <div class="dialog-actions"><button class="button" id="node-preview-button">预览匹配</button><button class="button primary" id="node-apply-button" disabled>确认导入</button></div>
+</dialog>
+<dialog id="node-add-dialog" class="node-dialog" aria-labelledby="node-add-title"><form id="node-add-form"><div class="panel-heading"><div><h2 id="node-add-title">添加节点</h2><p>适用于未加载的订阅，或需要手动维护的节点。</p></div><button type="button" class="text-button" id="node-add-close" aria-label="关闭添加节点">关闭 ×</button></div><label>节点名称<input id="node-add-name" required maxlength="300"></label><label>来源（可选）<input id="node-add-provider" maxlength="300" placeholder="订阅名称"></label><label>倍率（可留空）<input id="node-add-rate" type="number" min="0" max="10000" step="0.000001" placeholder="未知时暂按 1 倍"></label><div class="dialog-actions"><button class="button primary" id="node-add-save" type="submit">保存节点</button></div></form></dialog>
 </body>
 </html>
